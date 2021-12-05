@@ -11,7 +11,9 @@ BMGBOT.Kitname.Stationary.Health.AttackRange.Roamrange.Cooldown.Replaceitems.Par
 *  Replaceitems = 0 false / 1 true, will replace default corpse loot with kit loot.
 *  Parachute = 0 false / 1 true , will parachute to navmesh
 *  Name = custom display name to show on bot leave blank for random name
-<br><br>
+<br>
+How To Video: https://youtu.be/1FzqEGXRDyk
+<br>
  <h2>Example: BMGBOT.autokit.0.500.30.50.30.1.0.Starter Bot</h2>
  <br>
 That makes that spawner create a bots wearing autokit, <br>
