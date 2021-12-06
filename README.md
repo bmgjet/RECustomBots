@@ -2,7 +2,7 @@ Set Custom Prefab Name of a NPC Spawner
 Identifiyer Seperated by "."<br>
 BMGBOT.Kitname.Stationary.Health.AttackRange.Roamrange.Cooldown.Replaceitems.Parachute.Name
 <br> 
-*  Kitname = the name of the kit to put on the bot. 0 for no kit
+*  Kitname = the name of the kit to put on the bot. Leave blank for no kit. If using gender based kits seperate kitnames Male^Female 
 *  Stationary = 0 false / 1 true. Not move from spawner unless triggered
 *  Health = how much health bot has, 0 for default
 *  AttackRange = How far before bot attacks triggers
