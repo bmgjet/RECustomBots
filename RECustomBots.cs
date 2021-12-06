@@ -3,7 +3,7 @@
 *  Identifiyer Seperated by "."
 *  BMGBOT.Kitname.Stationary.Health.AttackRange.Roamrange.Cooldown.Replaceitems.Parachute.Name
 *  
-*  Kitname = the name of the kit to put on the bot. 0 for no kit
+*  Kitname = the name of the kit to put on the bot. Leave Blank for no kit, Male/Fem
 *  Stationary = 0 false / 1 true. Not move from spawner (Note Some NPC types wont be able to turn anymore to test the type your using)
 *  Health = how much health bot has, 0 for default
 *  AttackRange = How far before bot attacks triggers
@@ -31,6 +31,9 @@
  * npc_bandit_guard
  * scarecrow
  */
+
+//ToDo: Redo distance checks to allow for larger groupings.
+
 using Facepunch;
 using Oxide.Core.Plugins;
 using ProtoBuf;
@@ -40,7 +43,7 @@ using UnityEngine;
 using UnityEngine.AI;
 namespace Oxide.Plugins
 {
-    [Info("RECustomBots", "bmgjet", "1.0.1")]
+    [Info("RECustomBots", "bmgjet", "1.0.2")]
     [Description("Fixes bots created with NPC_Spawner in rust edit")]
     public class RECustomBots : RustPlugin
     {
@@ -158,6 +161,7 @@ namespace Oxide.Plugins
                     {
                         //Face Punches random function using steamid
                         bot._name = RandomUsernames.Get((int)bot.userID);
+                        plugin.NPC_Spawners[plugin.NPC_Bots[bot.userID]].name = bot._name;
                     }
                     else
                     {
@@ -195,23 +199,23 @@ namespace Oxide.Plugins
                             paracol.isTrigger = true;
                             bot.GetComponent<CapsuleCollider>().radius += 4f;
                         }
-                            //Move bot
-                            bot.transform.position = Home + new Vector3(0, 100, 0);
-                            bot.gameObject.layer = 0;
-                            //Adjust phyics stuff
-                            var rb = bot.gameObject.GetComponent<Rigidbody>();
-                            rb.drag = 0f;
-                            rb.useGravity = false;
-                            rb.isKinematic = false;
-                            rb.velocity = new Vector3(bot.transform.forward.x * 0, 0, bot.transform.forward.z * 0) - new Vector3(0, 10, 0);
-                            //Create the parachute
-                            var Chute = GameManager.server.CreateEntity("assets/prefabs/misc/parachute/parachute.prefab", bot.transform.position, Quaternion.Euler(0, 0, 0));
-                            Chute.gameObject.Identity();
-                            //Offset it to players back
-                            Chute.transform.localPosition = Chute.transform.localPosition + new Vector3(0f, 1.3f, 0f);
-                            //Attach player and spawn parachute
-                            Chute.SetParent(bot);
-                            Chute.Spawn();
+                        //Move bot
+                        bot.transform.position = Home + new Vector3(0, 100, 0);
+                        bot.gameObject.layer = 0;
+                        //Adjust phyics stuff
+                        var rb = bot.gameObject.GetComponent<Rigidbody>();
+                        rb.drag = 0f;
+                        rb.useGravity = false;
+                        rb.isKinematic = false;
+                        rb.velocity = new Vector3(bot.transform.forward.x * 0, 0, bot.transform.forward.z * 0) - new Vector3(0, 10, 0);
+                        //Create the parachute
+                        var Chute = GameManager.server.CreateEntity("assets/prefabs/misc/parachute/parachute.prefab", bot.transform.position, Quaternion.Euler(0, 0, 0));
+                        Chute.gameObject.Identity();
+                        //Offset it to players back
+                        Chute.transform.localPosition = Chute.transform.localPosition + new Vector3(0f, 1.3f, 0f);
+                        //Attach player and spawn parachute
+                        Chute.SetParent(bot);
+                        Chute.Spawn();
                         plugin.ParachuteSuiside(bot);
                     }
                     else
@@ -222,9 +226,25 @@ namespace Oxide.Plugins
                     //Sets kit onto bot if ones set
                     if (Kitname != "")
                     {
-                        //codes choake point
-                        plugin.BotSkin(bot, Kitname, replaceitems);
+                        if(Kitname.Contains("^"))
+                        {
+                            //Do male or female specific kits
+                            if(IsFemale(bot.userID))
+                            {
+                                Kitname = Kitname.Split('^')[1];
+                            }
+                            else
+                            {
+                                Kitname = Kitname.Split('^')[0];
+                            }
+                        }
+                        //codes choake point since hooks have to be single threaded.
+                        if (plugin.IsKit(Kitname))
+                        {
+                            plugin.BotSkin(bot, Kitname, replaceitems);
+                        }
                     }
+                    //Output Debug Info
                     if (plugin.Debug) plugin.Puts("Bot " + bot.displayName + " spawned,Health:" + bot.health + " Kit:" + Kitname + " Range:" + AttackRange.ToString() + " Roam:" + RoamDistance.ToString() + " Cooldown:" + Cooldown.ToString() + " Default Items:" + replaceitems + " Stationary:" + Stationary.ToString() + " Parachute:" + Parachute);
                     bot.SendNetworkUpdate();
                     //Setup repeating script after 5 secs at tick rate
@@ -238,7 +258,7 @@ namespace Oxide.Plugins
                 var rb = bot.gameObject.GetComponent<Rigidbody>();
                 //Scan for ground.
                 NavMeshHit hit;
-                if (NavMesh.SamplePosition(bot.transform.position, out hit, 40, -1))
+                if (NavMesh.SamplePosition(bot.transform.position, out hit, 30, -1))
                 {
                     //parachute colider reference remove
                     if (paracol != null)
@@ -257,7 +277,7 @@ namespace Oxide.Plugins
                     rb.useGravity = false;
                     bot.gameObject.layer = 17;
                     //Offset adjustment
-                    bot.ServerPosition = hit.position -= new Vector3(0,0.2f,0);
+                    bot.ServerPosition = hit.position -= new Vector3(0, 0.2f, 0);
                     bot.NavAgent.Move(bot.ServerPosition);
                     //Remove any attached Parachutes
                     bool Destroyed = false;
@@ -323,7 +343,7 @@ namespace Oxide.Plugins
                     return;
                 }
                 //Fall back check if bot falls though map while parachuting with out hitting a navmesh.
-                if(flying)
+                if (flying)
                 {
                     if (TerrainMeta.HeightMap.GetHeight(bot.transform.position) >= bot.transform.position.y || CheckColliders())
                     {
@@ -335,7 +355,7 @@ namespace Oxide.Plugins
                 //Dont run check if bot is downed
                 if (!bot.IsCrawling() && bot.IsAlive())
                 {
-                    if(Stationary)
+                    if (Stationary)
                     {
                         if (Vector3.Distance(bot.transform.position, Home) > 1f)
                         {
@@ -401,7 +421,7 @@ namespace Oxide.Plugins
                         LastInteraction = 0;
                         //Checks if its a gun or melee
                         var gun = bot.GetGun();
-                        
+
                         AttackEntity AE = bot?.GetHeldEntity() as AttackEntity;
                         if (gun == null && AE != null)
                         {
@@ -424,12 +444,11 @@ namespace Oxide.Plugins
                         else
                         {
                             //Do gun trigger
-                            bot.TriggerDown();
+                            try{bot.TriggerDown();}catch{ }
                             //reload gun if less than 1 shot left.
-                            if (gun.primaryMagazine.contents < 1)
-                            {
-                                bot.AttemptReload();
-                            }
+                            int ammo = 0;
+                            try{ammo = gun.primaryMagazine.contents;}catch { }
+                            if (ammo < 1){bot.AttemptReload();}
                         }
                     }
                 }
@@ -453,12 +472,16 @@ namespace Oxide.Plugins
             //Waits for fully loaded before running script to help first startup performance.
             timer.Once(10f, () =>
             {
-                if (Rust.Application.isLoading)
+                try
                 {
-                    //Still starting so run a timer again in 10 sec to check.
-                    Fstartup();
-                    return;
+                    if (Rust.Application.isLoading)
+                    {
+                        //Still starting so run a timer again in 10 sec to check.
+                        Fstartup();
+                        return;
+                    }
                 }
+                catch { }
                 //Starup script now.
                 Startup();
             });
@@ -468,13 +491,14 @@ namespace Oxide.Plugins
         {
             //Clears clocksettings incase its triggered reload.
             NPC_Spawners.Clear();
+            uint placeholderid = StringPool.toNumber[prefabplaceholder];
             //Find All NPCSpawners in the map
             for (int i = World.Serialization.world.prefabs.Count - 1; i >= 0; i--)
             {
                 PrefabData prefabdata = World.Serialization.world.prefabs[i];
+
                 //Check the prefab datas category since thats where customprefabs names are stored
-                //491222911 = Letter B since you cant prefab botspawners on there own.
-                if (prefabdata.id == StringPool.toNumber[prefabplaceholder] && prefabdata.category.Contains("BMGBOT"))
+                if (prefabdata.id == placeholderid && prefabdata.category.Contains("BMGBOT"))
                 {
                     //Pull settings from prefab name
                     string settings = prefabdata.category.Split(':')[1].Replace("\\", "");
@@ -487,7 +511,7 @@ namespace Oxide.Plugins
                             //Settings are seperated by a fullstop
                             string[] ParsedSettings = settings.Split('.');
                             //parse out first skipping 0 since thats the tag.
-                            try { if (plugin.IsKit(ParsedSettings[1])) { bs.kitname = ParsedSettings[1]; } } catch { }
+                            try { bs.kitname = ParsedSettings[1]; } catch { }
                             //2
                             try
                             {
@@ -576,7 +600,7 @@ namespace Oxide.Plugins
 
         void OnWorldPrefabSpawned(GameObject gameObject, string str)
         {
-            //Creates a list of prefab used a placeholders to make the prefab group.
+            //Creates a list of prefab used as placeholders to make the prefab group.
             if (gameObject.name == prefabplaceholder)
             {
                 PlaceHolders.Add(gameObject.GetComponent<BaseEntity>());
@@ -624,7 +648,7 @@ namespace Oxide.Plugins
                     }
                 });
             }
-        }      
+        }
 
         void UpdateCorpse(LootableCorpse corpse)
         {
@@ -656,7 +680,7 @@ namespace Oxide.Plugins
                         //Wait 1 sec since RE and other plugins might be adding stuff on the next frame already.
                         timer.Once(1f, () =>
                         {
-                            if(corpse == null)
+                            if (corpse == null)
                             {
                                 return;
                             }
@@ -686,11 +710,14 @@ namespace Oxide.Plugins
             //Go though each placeholder and make sure its with in range of the NPC Spawner before removing it.
             foreach (BaseEntity PH in PlaceHolders)
             {
-                foreach (KeyValuePair<Vector3, BotsSettings> Spawners in NPC_Spawners)
+                if (PH != null)
                 {
-                    if (Vector3.Distance(PH.transform.position, Spawners.Key) < ScanDistance)
+                    foreach (KeyValuePair<Vector3, BotsSettings> Spawners in NPC_Spawners)
                     {
-                        PH.Kill();
+                        if (Vector3.Distance(PH.transform.position, Spawners.Key) < ScanDistance)
+                        {
+                            try { PH.Kill(); } catch { }
+                        }
                     }
                 }
             }
@@ -729,20 +756,9 @@ namespace Oxide.Plugins
             });
         }
 
-        private bool IsKit(string kit)
-        {
-            //Call kit plugin to check if its valid kit
-            var success = Kits?.Call("isKit", kit);
-            if (success == null || !(success is bool))
-            {
-                return false;
-            }
-            return (bool)success;
-        }
-
         void ParachuteSuiside(NPCPlayer bot)
         {
-            //Destroys parachute after 10 secs incase bot gets stuck in trees/buildings
+            //Destroys parachute after 20 secs incase bot gets stuck in trees/buildings
             timer.Once(ChuteSider, () =>
             {
                 bool Destroyed = false;
@@ -768,17 +784,42 @@ namespace Oxide.Plugins
 
             //Create a delay for the animation
             float delay = 0.2f;
-            try{delay = weapon.aiStrikeDelay;}catch{}
+            try { delay = weapon.aiStrikeDelay; } catch { }
             timer.Once(delay, () =>
-             {
-                 //Check weapons reach.
-                 if (Vector3.Distance(bot.transform.position, AttackPlayer.transform.position) < weapon.maxDistance)
-                 {
-                     //Apply damage and play SFX
-                     AttackPlayer.Hurt(weapon.TotalDamage(), Rust.DamageType.Slash, null, true);
-                     Effect.server.Run("assets/bundled/prefabs/fx/headshot.prefab", AttackPlayer.transform.position);
-                 }
-             });
+            {
+                //Check weapons reach.
+                if (Vector3.Distance(bot.transform.position, AttackPlayer.transform.position) < weapon.maxDistance)
+                {
+                    //Apply damage and play SFX
+                    AttackPlayer.Hurt(weapon.TotalDamage(), Rust.DamageType.Slash, null, true);
+                    Effect.server.Run("assets/bundled/prefabs/fx/headshot.prefab", AttackPlayer.transform.position);
+                }
+            });
+        }
+
+        public static bool IsFemale(ulong userID)
+        {
+            //Save current random state
+            UnityEngine.Random.State state = UnityEngine.Random.state;
+            //initilise in a known state so we already know the outcome of the random generator
+            //Feed userid as the seed
+            UnityEngine.Random.InitState((int)(4332UL + userID));
+            //Determin gender
+            bool Gender = (UnityEngine.Random.Range(0f, 1f) > 0.5f);
+            //Reset state back to a random unknown state we saved.
+            UnityEngine.Random.state = state;
+            return Gender;
+        }
+
+        private bool IsKit(string kit)
+        {
+            //Call kit plugin to check if its valid kit
+            var success = Kits?.Call("isKit", kit);
+            if (success == null || !(success is bool))
+            {
+                return false;
+            }
+            return (bool)success;
         }
 
         void BotSkin(NPCPlayer bot, string Skin, bool replacement)
@@ -807,76 +848,76 @@ namespace Oxide.Plugins
                     Kits?.Call("GiveKit", bot, Skin);
                     //Trys to equip stuff after a delay for kits plugin to of ran
                     timer.Once(2f, () =>
-                     {
-                         Item projectileItem = null;
-                         //Find first gun
-                         foreach (var item in bot.inventory.containerBelt.itemList)
-                         {
-                             if (item.GetHeldEntity() is BaseProjectile)
-                             {
-                                 projectileItem = item;
-                                 break;
-                             }
-                         }
-                         if (projectileItem != null)
-                         {
-                             //pull out gun.
-                             bot.UpdateActiveItem(projectileItem.uid);
-                             bot.inventory.UpdatedVisibleHolsteredItems();
-                         }
-                         else
-                         {
-                             //Find a melee weapon in the belt
-                             foreach (var item in bot.inventory.containerBelt.itemList)
-                             {
-                                 if (item.GetHeldEntity() is BaseMelee)
-                                 {
-                                     projectileItem = item;
-                                     break;
-                                 }
-                             }
-                             //Pull out melee
-                             bot.UpdateActiveItem(projectileItem.uid);
-                         }
-                         //Only do this if bot wants items replaced on the corpse
-                         if (replacement)
-                         {
-                             NextTick(() =>
-                             {
-                             //Update bot item list for corpse use
-                             List<Botsinfo> items = new List<Botsinfo>();
-                                 foreach (Item item in bot.inventory.containerBelt.itemList)
-                                 {
-                                     if (item.info != null)
-                                     {
-                                         Botsinfo bi = ProcessKitItem(item);
-                                         if (!items.Contains(bi))
-                                             items.Add(bi);
-                                     }
+                    {
+                        Item projectileItem = null;
+                        //Find first gun
+                        foreach (var item in bot.inventory.containerBelt.itemList)
+                        {
+                            if (item.GetHeldEntity() is BaseProjectile)
+                            {
+                                projectileItem = item;
+                                break;
+                            }
+                        }
+                        if (projectileItem != null)
+                        {
+                            //pull out gun.
+                            bot.UpdateActiveItem(projectileItem.uid);
+                            bot.inventory.UpdatedVisibleHolsteredItems();
+                        }
+                        else
+                        {
+                            //Find a melee weapon in the belt
+                            foreach (var item in bot.inventory.containerBelt.itemList)
+                            {
+                                if (item.GetHeldEntity() is BaseMelee)
+                                {
+                                    projectileItem = item;
+                                    break;
+                                }
+                            }
+                            //Pull out melee
+                            bot.UpdateActiveItem(projectileItem.uid);
+                        }
+                        //Only do this if bot wants items replaced on the corpse
+                        if (replacement)
+                        {
+                            NextTick(() =>
+                            {
+                                //Update bot item list for corpse use
+                                List<Botsinfo> items = new List<Botsinfo>();
+                                foreach (Item item in bot.inventory.containerBelt.itemList)
+                                {
+                                    if (item.info != null)
+                                    {
+                                        Botsinfo bi = ProcessKitItem(item);
+                                        if (!items.Contains(bi))
+                                            items.Add(bi);
+                                    }
 
-                                 }
-                                 foreach (Item item in bot.inventory.containerMain.itemList)
-                                 {
-                                     if (item.info != null)
-                                     {
-                                         Botsinfo bi = ProcessKitItem(item);
-                                         if (!items.Contains(bi))
-                                             items.Add(bi);
-                                     }
-                                 }
-                                 foreach (Item item in bot.inventory.containerWear.itemList)
-                                 {
-                                     if (item.info != null)
-                                     {
-                                         Botsinfo bi = ProcessKitItem(item);
-                                         if (!items.Contains(bi))
-                                             items.Add(bi);
-                                     }
-                                 }
-                                 NPC_Items.Add(bot.userID, items);
-                             });
-                         }
-                     });
+                                }
+                                foreach (Item item in bot.inventory.containerMain.itemList)
+                                {
+                                    if (item.info != null)
+                                    {
+                                        Botsinfo bi = ProcessKitItem(item);
+                                        if (!items.Contains(bi))
+                                            items.Add(bi);
+                                    }
+                                }
+                                foreach (Item item in bot.inventory.containerWear.itemList)
+                                {
+                                    if (item.info != null)
+                                    {
+                                        Botsinfo bi = ProcessKitItem(item);
+                                        if (!items.Contains(bi))
+                                            items.Add(bi);
+                                    }
+                                }
+                                NPC_Items.Add(bot.userID, items);
+                            });
+                        }
+                    });
                 });
             });
         }
