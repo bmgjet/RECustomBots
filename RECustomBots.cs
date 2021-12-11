@@ -1,82 +1,3 @@
-//Custom PrefabName Layout
-/*
- * 
- * New Settings method using keywords in any order.
- * If a keyword isnt provided it will use the default for that setting.
- * Only what you provide is adjusted
- * 
- * How to use:
- * 
- * Seperate keywords by "." which will show as " " when in rust edit looking at prefab groups.
- * Prefab group name must start with BMGBOT.
- * 
- * Avaliable keywords
- * 
- * name=         if set it will apply a specific name to the bot, Other wise will pick one at random based on userid the spawner creates.
- * kit=          if set will apply kit to bot, Can do male/female specific kits by using ^ between them kit=malekit^femalekit
- * stationary    if this keyword is present bot will remain stationary.
- * parachute     if this keyword is present bot will parachute to navmesh.
- * replace       if this keyword is present bot replace default items with kit items.
- * strip         if this keyword is present bot will strip all its lot on death.
- * radiooff      if this keyword is present bot will not use the radio to chatter.
- * peacekeeper   if this keyword is present bot will only fire on hostile players.
- * mount         if this keyword is present bot will mount the closest seat.
- * taunt         if this keyword is present bot will make taunts in the chat to players it interacts with.
- * killnotice    if this keyword is present kills/deaths of this bot will be announced to chat.
- * health=       if set will adjust the bots health to this example health=150     
- * attack=       if set the boot will attack only up to this range loss of sight is a further 10f from this setting.
- * roam=         if set this is how far the bot can move from its home spawn before it wants to return to home.
- * cooldown=     if set changes the default home check rate.
- * height=       if set can make small adjustment to bots navmesh height usuall settings range will be -3 to +3.
- * speed=        if set adjusts how fast the bot can run.
- * steamicon=    if set the bot will use the steamicon from this steamid example would be steamicon=76561198188915047
- * 
- * 
- * Example: bot with 500hp health and is stionary
- * BMGBOT.stationary.health=500
- * 
- * Example: bot that has a 2 different kits for males and females, parachutes in, radio chatter disabled, default items removed.
- * BMGBOT.kit=guy1^girl1.radiooff.parachute.replace
- * 
- * Example: bot with custom name is a peacekeeper and sitting in a chair
- * BMGBOT.name=Lazy Bot.peacekeeper.mount
- * 
- * 
- *    OLD settings layout (Still valid, new layout allows for more settings tho)
- *    
-*  Identifiyer Seperated by "."
-*  BMGBOT.Kitname.Stationary.Health.AttackRange.Roamrange.Cooldown.Replaceitems.Parachute.Name
-*  
-*  Kitname = the name of the kit to put on the bot. Leave Blank for no kit, Male/Fem
-*  Stationary = 0 false / 1 true. Not move from spawner (Note Some NPC types wont be able to turn anymore to test the type your using)
-*  Health = how much health bot has, 0 for default
-*  AttackRange = How far before bot attacks triggers
-*  Roamrange = How far the bot can get from its spawner before it returns
-*  Cooldown = How long with no activity before it checks roam range.
-*  Replaceitems = 0 false / 1 true, will replace default corpse loot with kit loot.
-*  Parachute = 0 false / 1 true , will parachute to navmesh
-*  Name = custom display name to show on bot leave blank for random name (BMGBOT.Kitname.Stationary.Health.AttackRange.Roamrange.Cooldown.Replaceitems.Parachute)
-*  
-* Example: BMGBOT.autokit.0.500.30.50.30.1.0.Starter Bot
-* That makes that spawner create a bots wearing autokit,
-* They arent stationary, They Have 500HP, Can shoot upto 30f
-* Wont return home when within 50f (if player within attack range it wont return home)
-* Does Home check after 30 ticks of no activity.
-* Replaces the default corpse with kit items.
-* Give bot name of Starter Bot.
-*/
-//Rust Edits Default Bot Types
-/*
- * scientistnpc_roam
- * scientistnpc_peacekeeper
- * scientistnpc_heavy
- * scientistnpc_junkpile_pistol
- * npc_bandit_guard
- * scarecrow
- */
-
-//ToDo: Redo distance checks to allow for larger groupings.
-
 using Facepunch;
 using Oxide.Core.Plugins;
 using ProtoBuf;
@@ -114,6 +35,64 @@ namespace Oxide.Plugins
         float ChuteSider = 20f;
         //Checks this area around parachute for collision
         float ColliderDistance = 2f;
+        //List of random taunt dead messages to send {N} gets replaced with attacker/victims name.
+        private string[] Dead =
+        {
+            "You got me, GG",
+            ":(",
+            "Thats not nice {N}",
+            "Come on man?",
+            "Did you have to do that {N}",
+            "Argh again",
+            "Ur a cheater {N}",
+            "SAD GUY",
+        };
+        private string[] Killed =
+        {
+            "haha your bad {N}",
+            ":P EZ",
+            "Git Gud {N}",
+            "Wasted",
+            "Im not even trying {N}",
+            "HAHAHAHA {N}",
+        };
+/* New Settings method using keywords in any order.
+ * If a keyword isnt provided it will use the default for that setting.
+ * Only what you provide is adjusted
+ * 
+ * How to use:
+ * Seperate keywords by "." which will show as " " when in rust edit looking at prefab groups.
+ * Prefab group name must start with BMGBOT.
+ * 
+ * Avaliable keywords
+ * name=         if set it will apply a specific name to the bot, Other wise will pick one at random based on userid the spawner creates.
+ * kit=          if set will apply kit to bot, Can do male/female specific kits by using ^ between them kit=malekit^femalekit
+ * stationary    if this keyword is present bot will remain stationary.
+ * parachute     if this keyword is present bot will parachute to navmesh.
+ * replace       if this keyword is present bot replace default items with kit items.
+ * strip         if this keyword is present bot will strip all its lot on death.
+ * radiooff      if this keyword is present bot will not use the radio to chatter.
+ * peacekeeper   if this keyword is present bot will only fire on hostile players.
+ * mount         if this keyword is present bot will mount the closest seat.
+ * taunt         if this keyword is present bot will make taunts in the chat to players it interacts with.
+ * killnotice    if this keyword is present kills/deaths of this bot will be announced to chat.
+ * health=       if set will adjust the bots health to this example health=150     
+ * attack=       if set the boot will attack only up to this range loss of sight is a further 10f from this setting.
+ * roam=         if set this is how far the bot can move from its home spawn before it wants to return to home.
+ * cooldown=     if set changes the default home check rate.
+ * height=       if set can make small adjustment to bots navmesh height usuall settings range will be -3 to +3.
+ * speed=        if set adjusts how fast the bot can run.
+ * steamicon=    if set the bot will use the steamicon from this steamid example would be steamicon=76561198188915047
+ * 
+ * Example: bot with 500hp health and is stionary
+ * BMGBOT.stationary.health=500
+ * 
+ * Example: bot that has a 2 different kits for males and females, parachutes in, radio chatter disabled, default items removed.
+ * BMGBOT.kit=guy1^girl1.radiooff.parachute.replace
+ * 
+ * Example: bot with custom name is a peacekeeper and sitting in a chair
+ * BMGBOT.name=Lazy Bot.peacekeeper.mount
+*/
         //Layers of collision
         int parachuteLayer = 1 << (int)Rust.Layer.Water | 1 << (int)Rust.Layer.Transparent | 1 << (int)Rust.Layer.World | 1 << (int)Rust.Layer.Construction | 1 << (int)Rust.Layer.Debris | 1 << (int)Rust.Layer.Default | 1 << (int)Rust.Layer.Terrain | 1 << (int)Rust.Layer.Tree | 1 << (int)Rust.Layer.Vehicle_Large | 1 << (int)Rust.Layer.Deployed;
         //Stored location of spawner and its settings
@@ -147,27 +126,6 @@ namespace Oxide.Plugins
             76561198800018143,
             76561198091879314
         };
-        //List of random taunt dead messages to send {N} gets replaced with attacker/victims name.
-        private string[] Dead =
-        {
-            "You got me, GG",
-            ":(",
-            "Thats not nice {N}",
-            "Come on man?",
-            "Did you have to do that {N}",
-            "Argh again",
-            "Ur a cheater {N}",
-            "SAD GUY",
-        };
-        private string[] Killed =
-        {
-            "haha your bad {N}",
-            ":P EZ",
-            "Git Gud {N}",
-            "Wasted",
-            "Im not even trying {N}",
-            "HAHAHAHA {N}",
-        };
         //Last taunt said to prevent it repeating them in a row.
         int lasttaunt = -1;
         //reference to kits plugin
@@ -194,11 +152,12 @@ namespace Oxide.Plugins
         //Settings of the bot.
         private class BotsSettings
         {
+            //BotSettings Defaults
             public string kitname = "";
             public bool stationary = false;
             public int health = 0;
-            public float AttackRange = 1.5f;
-            public int roamrange = 20;
+            public float AttackRange = 20f;
+            public int roamrange = 30;
             public int cooldown = 30;
             public bool replaceitems = false;
             public bool parachute = false;
@@ -233,7 +192,7 @@ namespace Oxide.Plugins
             bool peacekeeper;
             float height;
             bool mount;
-            //Reference
+            //References
             NPCPlayer bot;
             ScientistBrain SB;
             ScarecrowBrain SB2;
