@@ -1,5 +1,49 @@
 //Custom PrefabName Layout
 /*
+ * 
+ * New Settings method using keywords in any order.
+ * If a keyword isnt provided it will use the default for that setting.
+ * Only what you provide is adjusted
+ * 
+ * How to use:
+ * 
+ * Seperate keywords by "." which will show as " " when in rust edit looking at prefab groups.
+ * Prefab group name must start with BMGBOT.
+ * 
+ * Avaliable keywords
+ * 
+ * name=         if set it will apply a specific name to the bot, Other wise will pick one at random based on userid the spawner creates.
+ * kit=          if set will apply kit to bot, Can do male/female specific kits by using ^ between them kit=malekit^femalekit
+ * stationary    if this keyword is present bot will remain stationary.
+ * parachute     if this keyword is present bot will parachute to navmesh.
+ * replace       if this keyword is present bot replace default items with kit items.
+ * strip         if this keyword is present bot will strip all its lot on death.
+ * radiooff      if this keyword is present bot will not use the radio to chatter.
+ * peacekeeper   if this keyword is present bot will only fire on hostile players.
+ * mount         if this keyword is present bot will mount the closest seat.
+ * taunt         if this keyword is present bot will make taunts in the chat to players it interacts with.
+ * killnotice    if this keyword is present kills/deaths of this bot will be announced to chat.
+ * health=       if set will adjust the bots health to this example health=150     
+ * attack=       if set the boot will attack only up to this range loss of sight is a further 10f from this setting.
+ * roam=         if set this is how far the bot can move from its home spawn before it wants to return to home.
+ * cooldown=     if set changes the default home check rate.
+ * height=       if set can make small adjustment to bots navmesh height usuall settings range will be -3 to +3.
+ * speed=        if set adjusts how fast the bot can run.
+ * steamicon=    if set the bot will use the steamicon from this steamid example would be steamicon=76561198188915047
+ * 
+ * 
+ * Example: bot with 500hp health and is stionary
+ * BMGBOT.stationary.health=500
+ * 
+ * Example: bot that has a 2 different kits for males and females, parachutes in, radio chatter disabled, default items removed.
+ * BMGBOT.kit=guy1^girl1.radiooff.parachute.replace
+ * 
+ * Example: bot with custom name is a peacekeeper and sitting in a chair
+ * BMGBOT.name=Lazy Bot.peacekeeper.mount
+ * 
+ * 
+ *    OLD settings layout (Still valid, new layout allows for more settings tho)
+ *    
 *  Identifiyer Seperated by "."
 *  BMGBOT.Kitname.Stationary.Health.AttackRange.Roamrange.Cooldown.Replaceitems.Parachute.Name
 *  
@@ -21,8 +65,7 @@
 * Replaces the default corpse with kit items.
 * Give bot name of Starter Bot.
 */
-
-//Rust Edits Bot Types
+//Rust Edits Default Bot Types
 /*
  * scientistnpc_roam
  * scientistnpc_peacekeeper
@@ -43,23 +86,30 @@ using UnityEngine;
 using UnityEngine.AI;
 namespace Oxide.Plugins
 {
-    [Info("RECustomBots", "bmgjet", "1.0.3")]
+    [Info("RECustomBots", "bmgjet", "1.0.4")]
     [Description("Fixes bots created with NPC_Spawner in rust edit")]
     public class RECustomBots : RustPlugin
     {
         public bool Debug = false;
+        //Plugin will remove any prefab at this exact location on server starting. You use it as a copy protection by placing something that stops
+        //servers from booting like a invisable pumpjack item on your map. Then copy its position value into below.
+        Vector3 MapLockLocation = new Vector3(0, 0, 0);
+        //Fixes doors collider to a smaller size so player can walk closer to them. But not break collider allowing bots to shoot though.
+        bool FixDoors = true;
         //Prefab placeholder
         string prefabplaceholder = "assets/prefabs/deployable/playerioents/gates/randswitch/electrical.random.switch.deployed.prefab";
         //Bot Tick Rate
         float bot_tick = 1f; //Default Apex was 0.5f, Default AINew was 0.25f
         //Place holder scan distance
         float ScanDistance = 1f;
-        //Kill Notices Shows in chat to all players when custom bots are killed
-        bool Kill_Notice = false;
+        //mount scan distance
+        float MountScan = 8f;
         //Change the icon of the message announcer
         ulong AnnouncementIcon = 0;
-        //Colour of annoucer
+        //Colour of announcer
         string color = "red";
+        //Protect Sleepers
+        bool SleepProtect = true;
         //Parachute Suiside Timer (will cut parachute off after this many seconds)
         float ChuteSider = 20f;
         //Checks this area around parachute for collision
@@ -76,6 +126,50 @@ namespace Oxide.Plugins
         List<BaseEntity> PlaceHolders = new List<BaseEntity>();
         //Check if fully started.
         private bool HasLoadedSpawner = false;
+        //Random list of Steam IDs to use for bot images
+        private ulong[] SteamIds = {
+            76561198201252634,
+            76561199110323558,
+            76561199194720194,
+            76561198129951438,
+            76561198144464080,
+            76561198101891231,
+            76561198157637478,
+            76561199225578578,
+            76561198188915047,
+            76561199219052430,
+            76561198138463675,
+            76561199172929853,
+            76561198401529908,
+            76561198032752525,
+            76561199135596964,
+            76561198065829079,
+            76561198800018143,
+            76561198091879314
+        };
+        //List of random taunt dead messages to send {N} gets replaced with attacker/victims name.
+        private string[] Dead =
+        {
+            "You got me, GG",
+            ":(",
+            "Thats not nice {N}",
+            "Come on man?",
+            "Did you have to do that {N}",
+            "Argh again",
+            "Ur a cheater {N}",
+            "SAD GUY",
+        };
+        private string[] Killed =
+        {
+            "haha your bad {N}",
+            ":P EZ",
+            "Git Gud {N}",
+            "Wasted",
+            "Im not even trying {N}",
+            "HAHAHAHA {N}",
+        };
+        //Last taunt said to prevent it repeating them in a row.
+        int lasttaunt = -1;
         //reference to kits plugin
         [PluginReference]
         private Plugin Kits;
@@ -109,6 +203,15 @@ namespace Oxide.Plugins
             public bool replaceitems = false;
             public bool parachute = false;
             public string name = "";
+            public bool radiooff = false;
+            public bool peacekeeper = false;
+            public bool taunts = false;
+            public bool killnotice = false;
+            public float height = 0f;
+            public ulong steamicon = 0;
+            public bool strip = false;
+            public bool mount = false;
+            public int speed = 0;
         }
         //Bot script
         public class BMGBOT : MonoBehaviour
@@ -127,6 +230,9 @@ namespace Oxide.Plugins
             bool Parachute;
             bool Stationary;
             bool replaceitems;
+            bool peacekeeper;
+            float height;
+            bool mount;
             //Reference
             NPCPlayer bot;
             ScientistBrain SB;
@@ -161,11 +267,19 @@ namespace Oxide.Plugins
                         Parachute = settings.parachute;
                         Stationary = settings.stationary;
                         replaceitems = settings.replaceitems;
+                        peacekeeper = settings.peacekeeper;
+                        height = settings.height;
+                        mount = settings.mount;
                     }
                     else
                     {
                         //No settings act default
                         return;
+                    }
+                    //Pick a random Icon
+                    if (settings.steamicon == 0)
+                    {
+                        settings.steamicon = plugin.SteamIds[Random.Range(0, plugin.SteamIds.Length - 1)] + 100u;
                     }
                     //Set as own owner
                     bot.OwnerID = bot.userID;
@@ -185,7 +299,7 @@ namespace Oxide.Plugins
                     }
                     //Update the bot
                     bot.displayName = Name;
-                    
+
                     //Set bot health
                     if (Health != 0)
                     {
@@ -246,10 +360,10 @@ namespace Oxide.Plugins
                     //Sets kit onto bot if ones set
                     if (Kitname != "")
                     {
-                        if(Kitname.Contains("^"))
+                        if (Kitname.Contains("^"))
                         {
                             //Do male or female specific kits
-                            if(IsFemale(bot.userID))
+                            if (IsFemale(bot.userID))
                             {
                                 Kitname = Kitname.Split('^')[1];
                             }
@@ -259,13 +373,13 @@ namespace Oxide.Plugins
                             }
                         }
                         //codes choake point since hooks have to be single threaded.
-                        //if (plugin.IsKit(Kitname))
-                        //{
-                        //    plugin.BotSkin(bot, Kitname, replaceitems);
-                        //}
+                        if (plugin.IsKit(Kitname))
+                        {
+                            plugin.BotSkin(bot, Kitname, replaceitems);
+                        }
                     }
                     //stops down spamming when cool down set too low
-                    if(Cooldown < 5)
+                    if (Cooldown < 5)
                     {
                         Cooldown = 10;
                     }
@@ -277,6 +391,10 @@ namespace Oxide.Plugins
                         SB.Navigator.MaxRoamDistanceFromHome = RoamDistance;
                         SB.AttackRangeMultiplier = 1f;
                         SB.Senses.Memory.Targets.Clear();
+                        //Adjust speed
+                        SB.Navigator.Speed = settings.speed;
+                        //peacekeeper check;
+                        SB.HostileTargetsOnly = peacekeeper;
                     }
                     if (SB2 != null)
                     {
@@ -285,6 +403,10 @@ namespace Oxide.Plugins
                         SB2.Navigator.MaxRoamDistanceFromHome = RoamDistance;
                         SB2.AttackRangeMultiplier = 1f;
                         SB2.Senses.Memory.Targets.Clear();
+                        //Adjust speed
+                        SB2.Navigator.Speed = settings.speed;
+                        //peacekeeper check;
+                        SB2.HostileTargetsOnly = peacekeeper;
                     }
 
                     //Output Debug Info
@@ -320,7 +442,7 @@ namespace Oxide.Plugins
                     rb.useGravity = false;
                     bot.gameObject.layer = 17;
                     //Offset adjustment
-                    bot.ServerPosition = hit.position -= new Vector3(0, 0.2f, 0);
+                    bot.ServerPosition = hit.position -= new Vector3(0, (height / 10), 0);
                     bot.NavAgent.Move(bot.ServerPosition);
                     //Remove any attached Parachutes
                     bool Destroyed = false;
@@ -331,6 +453,7 @@ namespace Oxide.Plugins
                         Destroyed = true;
                         break;
                     }
+                    //Play sound fx if a parachute gets destroyed
                     if (Destroyed)
                     {
                         Effect.server.Run("assets/bundled/prefabs/fx/player/groundfall.prefab", bot.transform.position);
@@ -347,6 +470,11 @@ namespace Oxide.Plugins
                 flying = false;
                 if (SB != null) SB.Navigator.CanUseNavMesh = !Stationary;
                 if (SB2 != null) SB2.Navigator.CanUseNavMesh = !Stationary;
+                //mounts bot onto nearby mount point if set.
+                if (mount)
+                {
+                    plugin.MountBot(bot);
+                }
             }
 
             //Collider to remove parachute
@@ -355,17 +483,20 @@ namespace Oxide.Plugins
                 //Ignore collider if not flying
                 if (!flying)
                     return;
-
+                //Attach to navmesh
                 ClipGround();
             }
 
             bool CheckColliders()
             {
+                //Scans the area
                 foreach (Collider col in Physics.OverlapSphere(bot.transform.position, plugin.ColliderDistance, plugin.parachuteLayer))
                 {
+                    //Converts each collider to a string
                     string thisobject = col.gameObject.ToString();
+                    //Checks if collider contains partial names
                     if (thisobject.Contains("modding") || thisobject.Contains("props") || thisobject.Contains("structures") || thisobject.Contains("building core")) { return true; }
-
+                    //Check if its a base entity
                     BaseEntity baseEntity = col.gameObject.ToBaseEntity();
                     if (baseEntity != null && (baseEntity == bot || baseEntity == bot.GetComponent<BaseEntity>()))
                     {
@@ -395,12 +526,14 @@ namespace Oxide.Plugins
                     SB2.Navigator.SetDestination(Home, BaseNavigator.NavigationSpeed.Normal);
                     SB2.SwitchToState(AIState.TakeCover);
                 }
+                //Change flags
                 bot.SetPlayerFlag(BasePlayer.PlayerFlags.Relaxed, true);
                 bot.SetPlayerFlag(BasePlayer.PlayerFlags.Aiming, false);
             }
 
             void ForgetAll(int resetdelay)
             {
+                //Clear all memory and disable senses for a little bit to gain some distance.
                 if (SB != null)
                 {
                     SB.Senses.Memory.Targets.Clear();
@@ -408,6 +541,7 @@ namespace Oxide.Plugins
                     SB.Senses.Memory.All.Clear();
                     SB.Senses.Memory.LOS.Clear();
                     SB.CurrentState.StateLeave();
+                    SB.HostileTargetsOnly = peacekeeper;
                     SB.SetEnabled(false);
                     Invoke("ResetSenses", resetdelay);
                 }
@@ -418,6 +552,7 @@ namespace Oxide.Plugins
                     SB2.Senses.Memory.All.Clear();
                     SB2.Senses.Memory.LOS.Clear();
                     SB2.CurrentState.StateLeave();
+                    SB2.HostileTargetsOnly = peacekeeper;
                     SB2.SetEnabled(false);
                     Invoke("ResetSenses", resetdelay);
                 }
@@ -425,14 +560,15 @@ namespace Oxide.Plugins
 
             void ResetSenses()
             {
-                    if (SB != null)
-                    {
-                        SB.SetEnabled(true);
-                    }
-                    if (SB2 != null)
-                    {
-                        SB2.SetEnabled(true);
-                    }
+                //Delayed enabling of senses
+                if (SB != null)
+                {
+                    SB.SetEnabled(true);
+                }
+                if (SB2 != null)
+                {
+                    SB2.SetEnabled(true);
+                }
             }
 
             void _tick()
@@ -483,20 +619,15 @@ namespace Oxide.Plugins
                         }
                     }
 
-                    //BasePlayer AttackPlayer = null;
-                    //////Casts a ray from eyes to check if player is there.
-                    //try
-                    //{
-                    //    RaycastHit hit;
-                    //    var raycast = Physics.Raycast(bot.eyes.HeadRay(), out hit, AttackRange, LayerMask.GetMask("Player (Server)"));
-                    //    ////Cast result of first ray hit to base player
-                    //    AttackPlayer = raycast ? hit.GetEntity() as BasePlayer : null;
-                    //}
-                    //catch { }
-
                     //No players with in range do nothing.
                     if (AttackPlayer == null)
                     {
+                        //Dont try to move if bot is sitting.
+                        if (bot.isMounted)
+                        {
+                            //Do Some Seated stuff
+                            return;
+                        }
                         ////Return home if no more activity.
                         if (LastInteraction >= Cooldown && Vector3.Distance(bot.transform.position, Home) >= RoamDistance && !flying)
                         {
@@ -517,9 +648,17 @@ namespace Oxide.Plugins
                             //Reset interaction and movement
                             LastInteraction = 0;
                             if (plugin.Debug) plugin.Puts(bot.displayName + " Going Home");
-                            ForgetAll(10);
-                            GoHome();
-                            return;
+                            try
+                            {
+                                ForgetAll(10);
+                                GoHome();
+                                return;
+                            }
+                            catch
+                            {
+                                bot.Kill();
+                                return;
+                            }
                         }
                         //No interaction this tick
                         LastInteraction++;
@@ -530,6 +669,16 @@ namespace Oxide.Plugins
                     {
                         FailedHomes = 0;
                         LastInteraction = 0;
+                        //Peacekeeper bypass attack code.
+                        if (peacekeeper && !AttackPlayer.IsHostile())
+                        {
+                            return;
+                        }
+                        //Sleeper Protection
+                        if (plugin.SleepProtect && AttackPlayer.IsSleeping())
+                        {
+                            return;
+                        }
                         //Checks if its a gun or melee
                         var gun = bot.GetGun();
 
@@ -538,14 +687,14 @@ namespace Oxide.Plugins
                         {
                             BaseMelee weapon = bot?.GetHeldEntity() as BaseMelee;
                             //Do melee slash if in its reach
-                            if (!AE.HasAttackCooldown() && Vector3.Distance(AttackPlayer.transform.position,bot.transform.position) <= weapon.maxDistance)
+                            if (!AE.HasAttackCooldown() && Vector3.Distance(AttackPlayer.transform.position, bot.transform.position) <= weapon.maxDistance)
                             {
                                 //melee hit
                                 if (plugin.Debug) plugin.Puts("Trigger Melee");
                                 if (bot.MeleeAttack())
                                 {
                                     AE.StartAttackCooldown(AE.attackSpacing);
-                                    
+
                                     //Apply Damage
                                     if (weapon != null)
                                     {
@@ -558,14 +707,27 @@ namespace Oxide.Plugins
                         {
                             //Do gun trigger
                             if (plugin.Debug) plugin.Puts("Trigger shoot");
-                            try{bot.TriggerDown();}catch{ }
+                            bot.triggerEndTime = Time.time + UnityEngine.Random.Range(gun.attackLengthMin, gun.attackLengthMax);
+                            try { InvokeRepeating("burstfire", 0f, 0.025f); } catch { }
+
                             //reload gun if less than 1 shot left.
                             int ammo = 0;
-                            try{ammo = gun.primaryMagazine.contents;}catch { }
-                            if (ammo < 1){bot.AttemptReload();}
+                            try { ammo = gun.primaryMagazine.contents; } catch { }
+                            if (ammo < 1) { bot.AttemptReload(); }
                         }
                     }
                 }
+            }
+
+            void burstfire()
+            {
+                //Rapid fire fox a white
+                if (bot.triggerEndTime > Time.time)
+                {
+                    bot.TriggerDown();
+                    return;
+                }
+                CancelInvoke("burstfire");
             }
         }
 
@@ -622,23 +784,30 @@ namespace Oxide.Plugins
                         BotsSettings bs = new BotsSettings();
                         if (settings != null)
                         {
- 
-
                             //Settings are seperated by a fullstop
                             string[] ParsedSettings = settings.Split('.');
                             bool oldsettings = true;
                             //Try new method first of using just keywords not dependant on position.
                             foreach (string keyword in ParsedSettings)
                             {
-                               if(keyword.ToLower().Contains("stationary")){bs.stationary = true;oldsettings = false;}
-                                else if (keyword.ToLower().Contains("name")){try{bs.name = keyword.Split('=')[1];}catch{bs.name = "";}oldsettings = false;}
-                                else if (keyword.ToLower().Contains("kit")){try{bs.kitname = keyword.Split('=')[1];}catch{bs.kitname = "";}oldsettings = false;}
-                                else if (keyword.ToLower().Contains("parachute")){bs.parachute = true;oldsettings = false;}
-                                else if (keyword.ToLower().Contains("replace")){bs.replaceitems = true;oldsettings = false;}
-                                else if (keyword.ToLower().Contains("health")){try{bs.health = int.Parse(keyword.Split('=')[1]);}catch{bs.health = 0;}oldsettings = false;}
-                                else if (keyword.ToLower().Contains("attack")){try{bs.AttackRange = int.Parse(keyword.Split('=')[1]);}catch{bs.AttackRange = 30;}oldsettings = false;}
-                                else if (keyword.ToLower().Contains("roam")){try{bs.roamrange = int.Parse(keyword.Split('=')[1]);}catch{bs.roamrange = 30;}oldsettings = false;}
-                                else if (keyword.ToLower().Contains("cooldown")){try{bs.cooldown = int.Parse(keyword.Split('=')[1]);}catch{bs.cooldown = 15;}oldsettings = false;}
+                                if (keyword.ToLower().Contains("stationary")) { bs.stationary = true; oldsettings = false; }
+                                else if (keyword.ToLower().Contains("name")) { try { bs.name = keyword.Split('=')[1]; } catch { bs.name = ""; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("kit")) { try { bs.kitname = keyword.Split('=')[1]; } catch { bs.kitname = ""; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("parachute")) { bs.parachute = true; oldsettings = false; }
+                                else if (keyword.ToLower().Contains("replace")) { bs.replaceitems = true; oldsettings = false; }
+                                else if (keyword.ToLower().Contains("health")) { try { bs.health = int.Parse(keyword.Split('=')[1]); } catch { bs.health = 0; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("attack")) { try { bs.AttackRange = int.Parse(keyword.Split('=')[1]); } catch { bs.AttackRange = 30; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("roam")) { try { bs.roamrange = int.Parse(keyword.Split('=')[1]); } catch { bs.roamrange = 30; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("cooldown")) { try { bs.cooldown = int.Parse(keyword.Split('=')[1]); } catch { bs.cooldown = 15; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("peacekeeper")) { try { bs.peacekeeper = true; } catch { bs.peacekeeper = false; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("radiooff")) { try { bs.radiooff = true; } catch { bs.radiooff = false; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("taunt")) { try { bs.taunts = true; } catch { bs.taunts = false; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("height")) { try { bs.height = int.Parse(keyword.Split('=')[1]); } catch { bs.height = 0; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("steamicon")) { try { bs.steamicon = ulong.Parse(keyword.Split('=')[1]); } catch { bs.steamicon = 0; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("speed")) { try { bs.speed = int.Parse(keyword.Split('=')[1]); } catch { bs.speed = 0; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("strip")) { try { bs.strip = true; } catch { bs.strip = false; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("mount")) { try { bs.mount = true; } catch { bs.mount = false; } oldsettings = false; }
+                                else if (keyword.ToLower().Contains("killnotice")) { try { bs.killnotice = true; } catch { bs.killnotice = false; } oldsettings = false; }
                             }
 
                             //Do static settings layout
@@ -703,11 +872,6 @@ namespace Oxide.Plugins
             RemoveAllPlaceHolders();
             //Outputs debug info
             Puts("Found " + NPC_Spawners.Count.ToString() + " NPC Spawners");
-            //Checks if theres any bots already spawned.
-            foreach (NPCPlayer bot in BaseNetworkable.FindObjectsOfType<NPCPlayer>())
-            {
-                NextFrame(() =>{CheckBot(bot);});
-            }
         }
 
         private void Unload()
@@ -716,6 +880,7 @@ namespace Oxide.Plugins
             //removes the script
             foreach (var script in GameObject.FindObjectsOfType<NPCPlayer>())
             {
+                script.EnsureDismounted();
                 foreach (var af in script.GetComponentsInChildren<BMGBOT>())
                 {
                     UnityEngine.Object.DestroyImmediate(af);
@@ -732,29 +897,105 @@ namespace Oxide.Plugins
             {
                 PlaceHolders.Add(gameObject.GetComponent<BaseEntity>());
             }
+            //Fix invalid prefab stopping server starting
+            BaseEntity component = gameObject.GetComponent<BaseEntity>();
+            if (component != null)
+            {
+                if (component.OwnerID == 0 && gameObject.transform.position == MapLockLocation && MapLockLocation != new Vector3(0, 0, 0))
+                {
+                    if (Debug) Puts("Removed Invalid Prefab @ " + MapLockLocation);
+                    //Remove Invalid Prefab thats used as somewhat protection.
+                    component.Kill();
+                    return;
+                }
+
+                //Door collider shrink but not destroy to stop bots shooting though then.
+                if (FixDoors)
+                {
+                    Door doorfix = component.GetComponent<Door>();
+                    if (doorfix != null)
+                    {
+                        if (Debug) Puts("Door Fixed @ " + doorfix.transform.position.ToString());
+                        //Scales door X to 0.1 so it still has some thickness to stop bot bullet and vison but not so thick player hits on it.
+                        doorfix.transform.localScale = new Vector3(0.1f, doorfix.transform.localScale.y, doorfix.transform.localScale.z);
+                    }
+                }
+            }
         }
 
         void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
-            //Shows death notices to all players when custom bot is killed.
-            if (entity == null || info == null) return;
-            if (Kill_Notice && entity.IsNpc && NPC_Bots.ContainsKey(entity.OwnerID))
+            //Dismount bots on seat break
+            BaseMountable seat = entity.GetComponent<BaseMountable>();
+            if (seat != null && seat._mounted.IsNpc)
             {
-                    BasePlayer attacker = entity.lastAttacker.ToPlayer();
-                    if (attacker != null)
+                seat._mounted.EnsureDismounted();
+            }
+            //Get player
+            BasePlayer player = entity.ToPlayer();
+            if (player == null) return;
+            //Get who was the attacker
+            BasePlayer attacker = player.lastAttacker.ToPlayer();
+            if (attacker == null) return;
+            //Failsafe so while loop cant get stuck going on for ever
+            int failsafe = 0;
+
+            //Taunt bot kills
+            if (NPC_Bots.ContainsKey(attacker.userID))
+            {
+                if (NPC_Spawners.ContainsKey(NPC_Bots[attacker.userID]))
+                {
+                    if (NPC_Spawners[NPC_Bots[attacker.OwnerID]].taunts)
                     {
-                        CreateAnouncment(entity.lastAttacker.ToPlayer().displayName + " Killed " + entity._name + " With " + info.damageTypes.GetMajorityDamageType());
+                        //Pick a taunt at randm making sure not to be a repeat
+                        int seed = Random.Range(0, Killed.Length - 1);
+                        while (seed == lasttaunt && failsafe < 10)
+                        {
+                            failsafe++;
+                            seed = Random.Range(0, Killed.Length - 1);
+                        }
+                        lasttaunt = seed;
+                        //Send taunt to chat.
+                        CreateTaunt(Killed[seed].Replace("{N}", player.displayName), attacker.ToPlayer(), NPC_Spawners[NPC_Bots[attacker.OwnerID]].steamicon);
+                        return;
                     }
+                }
+            }
+            //taunt bot dies
+            if (NPC_Bots.ContainsKey(player.userID))
+            {
+                if (NPC_Spawners.ContainsKey(NPC_Bots[player.userID]))
+                {
+                    //Public bot death annoucements
+                    if (NPC_Spawners[NPC_Bots[player.OwnerID]].killnotice)
+                    {
+                        //Send kill announcement to chat.
+                        CreateAnouncment(attacker.displayName + " Killed " + player._name + " With " + info.damageTypes.GetMajorityDamageType());
+                    }
+                    if (NPC_Spawners[NPC_Bots[player.OwnerID]].taunts)
+                    {
+                        //Pick a taunt at randm making sure not to be a repeat
+                        int seed = Random.Range(0, Dead.Length - 1);
+                        while (seed == lasttaunt && failsafe < 10)
+                        {
+                            failsafe++;
+                            seed = Random.Range(0, Dead.Length - 1);
+                        }
+                        lasttaunt = seed;
+                        //Send taunt to chat.
+                        CreateTaunt(Dead[seed].Replace("{N}", attacker.displayName), player.ToPlayer(), NPC_Spawners[NPC_Bots[player.OwnerID]].steamicon);
+                        return;
+                    }
+                }
             }
         }
-
 
         void OnEntitySpawned(BaseNetworkable entity)
         {
             //Fix console spam
             BaseNavigator baseNavigator = entity.GetComponent<BaseNavigator>();
             //Checks if has navigator AI
-            if(baseNavigator != null)
+            if (baseNavigator != null)
             {
                 //temp position
                 Vector3 pos;
@@ -773,7 +1014,6 @@ namespace Oxide.Plugins
                 //Checks if NPC_Spawner list has been filled
                 if (!HasLoadedSpawner)
                     Startup();
-
                 //Checks bots against NPC_Spawner
                 NextFrame(() => { CheckBot(bot); });
             }
@@ -814,14 +1054,17 @@ namespace Oxide.Plugins
                 //Checks if settings from the spawner
                 if (NPC_Spawners.ContainsKey(NPC_Bots[corpse.playerSteamID]))
                 {
-                    //If its set to replace items
-                    if (NPC_Spawners[NPC_Bots[corpse.playerSteamID]].replaceitems)
+                    //If its set to replace items or strip them
+                    if (NPC_Spawners[NPC_Bots[corpse.playerSteamID]].replaceitems || NPC_Spawners[NPC_Bots[corpse.playerSteamID]].strip)
                     {
                         //Empty default items off corpse
                         for (int i = 0; i < 3; i++)
                         {
                             corpse.containers[i].Clear();
                         }
+                        //Only remove items 
+                        if (NPC_Spawners[NPC_Bots[corpse.playerSteamID]].strip) return;
+
                         //Checks list of saved items from kit
                         if (NPC_Items.ContainsKey(corpse.playerSteamID))
                         {
@@ -886,11 +1129,23 @@ namespace Oxide.Plugins
             {
                 if (current.IsConnected)
                 {
-                    rust.SendChatMessage(current, "<color="+color+">Death</color>", msg, AnnouncementIcon.ToString());
+                    rust.SendChatMessage(current, "<color=" + color + ">Death</color>", msg, AnnouncementIcon.ToString());
                 }
             }
-
         }
+
+        //Sends chat message to all active players.
+        void CreateTaunt(string msg, BasePlayer player, ulong steamid)
+        {
+            foreach (BasePlayer current in BasePlayer.activePlayerList.ToArray())
+            {
+                if (current.IsConnected)
+                {
+                    rust.SendChatMessage(current, "<color=#55aaff>" + player.displayName + "</color>:", msg, steamid.ToString());
+                }
+            }
+        }
+
 
         void CheckBot(NPCPlayer bot)
         {
@@ -912,7 +1167,7 @@ namespace Oxide.Plugins
                 }
             }
             //Murdurer Fix Delay so it can spawn chainsaw then start it so it will do damage.
-            timer.Once(5f, () =>
+            timer.Once(2f, () =>
             {
                 //checks if it has a chainsaw
                 Chainsaw cs = bot.GetHeldEntity() as Chainsaw;
@@ -972,16 +1227,53 @@ namespace Oxide.Plugins
         private object OnNpcTarget(NPCPlayer npc, BaseEntity entity)
         {
             if (entity == null || npc == null) return null;
-            if(NPC_Bots.ContainsKey(npc.userID))
+            if (NPC_Bots.ContainsKey(npc.userID))
             {
-             if(NPC_Spawners.ContainsKey(NPC_Bots[npc.userID]))
-             {
-                   if( Vector3.Distance(npc.transform.position, entity.transform.position) >= NPC_Spawners[NPC_Bots[npc.userID]].AttackRange + 10)
+                if (NPC_Spawners.ContainsKey(NPC_Bots[npc.userID]))
+                {
+                    if (Vector3.Distance(npc.transform.position, entity.transform.position) >= NPC_Spawners[NPC_Bots[npc.userID]].AttackRange + 10)
                     {
                         return true;
                     }
-             }
+                    //Cast target to baseplayer to check some conditions
+                    BasePlayer TargetedPlayer = entity.ToPlayer();
+                    if (TargetedPlayer == null)
+                    {
+                        return null;
+                    }
+                    //Block targeting of non-hostile players from peacekeeper bots.
+                    if (NPC_Spawners[NPC_Bots[npc.userID]].peacekeeper && !TargetedPlayer.IsHostile())
+                    {
+                        return true;
+                    }
+                    //Protects sleepers
+                    if (SleepProtect && TargetedPlayer.IsSleeping())
+                    {
+                        return true;
+                    }
+                }
             }
+            return null;
+        }
+
+        //Hook to disable radio
+        private object OnNpcRadioChatter(ScientistNPC npc)
+        {
+            //Check if a custom bot
+            if (NPC_Bots.ContainsKey(npc.userID))
+            {
+                //check if has setting
+                if (NPC_Spawners.ContainsKey(NPC_Bots[npc.userID]))
+                {
+                    //check radio status and disable radio if set
+                    if (NPC_Spawners[NPC_Bots[npc.userID]].radiooff)
+                    {
+                        //no chatter
+                        return true;
+                    }
+                }
+            }
+            //Normal bahavour
             return null;
         }
 
@@ -997,6 +1289,28 @@ namespace Oxide.Plugins
             //Reset state back to a random unknown state we saved.
             UnityEngine.Random.state = state;
             return Gender;
+        }
+
+        //Scans around the bot for seats, Put the bot in the closest seat to it.
+        public void MountBot(NPCPlayer bot)
+        {
+            List<BaseMountable> Seats = new List<BaseMountable>();
+            Vis.Entities<BaseMountable>(bot.transform.position, MountScan, Seats);
+            BaseMountable closest_seat = null;
+            foreach (BaseMountable seat in Seats)
+            {
+                if (seat.HasFlag(BaseEntity.Flags.Busy)) continue;
+                if (closest_seat == null) closest_seat = seat;
+                if (Vector3.Distance(bot.transform.position, seat.transform.position) <= Vector3.Distance(bot.transform.position, closest_seat.transform.position))
+                    closest_seat = seat;
+            }
+            if (closest_seat != null)
+            {
+                closest_seat.GetComponent<BaseMountable>().AttemptMount(bot);
+                closest_seat.SendNetworkUpdateImmediate();
+                bot.SendNetworkUpdateImmediate();
+                if (plugin.Debug) plugin.Puts(bot.displayName + " Forced into Seat @ " + closest_seat.transform.position.ToString());
+            }
         }
 
         private bool IsKit(string kit)
@@ -1015,97 +1329,105 @@ namespace Oxide.Plugins
             //Delayed to make sure its not fired before bot gets orignal kit.
             NextFrame(() =>
             {
-                //Remove default items
-                foreach (Item item in bot.inventory.containerBelt.itemList)
-                {
-                    item.Remove();
-                }
-                foreach (Item item in bot.inventory.containerMain.itemList)
-                {
-                    item.Remove();
-                }
-                foreach (Item item in bot.inventory.containerWear.itemList)
-                {
-                    item.Remove();
-                }
+                //Move default items into a droped backpack at GC, Ugly way to fix errors from NPCs spawning with same userids and having links to destroyed items
+                var belt = bot.inventory.containerBelt.Drop("assets/prefabs/misc/item drop/item_drop_backpack.prefab", new Vector3(0, 0, 0), bot.transform.rotation);
+                var main = bot.inventory.containerMain.Drop("assets/prefabs/misc/item drop/item_drop_backpack.prefab", new Vector3(0, 0, 0), bot.transform.rotation);
+                var wear = bot.inventory.containerWear.Drop("assets/prefabs/misc/item drop/item_drop_backpack.prefab", new Vector3(0, 0, 0), bot.transform.rotation);
 
                 //Delay for items removal to take effect
                 NextFrame(() =>
                 {
+                    //Remove dropped backpacks
+                    if (belt != null){belt.RemoveMe();}
+                    if (main != null){main.RemoveMe();}
+                    if (wear != null){wear.RemoveMe();}
                     //Try apply the kit
                     Kits?.Call("GiveKit", bot, Skin);
                     //Trys to equip stuff after a delay for kits plugin to of ran
-                    timer.Once(2f, () =>
+                    try
                     {
-                        Item projectileItem = null;
-                        //Find first gun
-                        foreach (var item in bot.inventory.containerBelt.itemList)
+                        timer.Once(1f, () =>
                         {
-                            if (item.GetHeldEntity() is BaseProjectile)
-                            {
-                                projectileItem = item;
-                                break;
-                            }
-                        }
-                        if (projectileItem != null)
-                        {
-                            //pull out gun.
-                            bot.UpdateActiveItem(projectileItem.uid);
-                            bot.inventory.UpdatedVisibleHolsteredItems();
-                        }
-                        else
-                        {
-                            //Find a melee weapon in the belt
+                            Item projectileItem = null;
+                            //Find first gun
                             foreach (var item in bot.inventory.containerBelt.itemList)
                             {
-                                if (item.GetHeldEntity() is BaseMelee)
+                                if (item.GetHeldEntity() is BaseProjectile)
                                 {
                                     projectileItem = item;
                                     break;
                                 }
                             }
-                            //Pull out melee
-                            bot.UpdateActiveItem(projectileItem.uid);
-                        }
-                        //Only do this if bot wants items replaced on the corpse
-                        if (replacement)
-                        {
-                            NextTick(() =>
+                            if (projectileItem != null)
                             {
-                                //Update bot item list for corpse use
-                                List<Botsinfo> items = new List<Botsinfo>();
-                                foreach (Item item in bot.inventory.containerBelt.itemList)
+                                //pull out gun.
+                                bot.UpdateActiveItem(projectileItem.uid);
+                                bot.inventory.UpdatedVisibleHolsteredItems();
+                            }
+                            else
+                            {
+                                //Find a melee weapon in the belt
+                                foreach (var item in bot.inventory.containerBelt.itemList)
                                 {
-                                    if (item.info != null)
+                                    if (item.GetHeldEntity() is BaseMelee)
                                     {
-                                        Botsinfo bi = ProcessKitItem(item);
-                                        if (!items.Contains(bi))
-                                            items.Add(bi);
+                                        projectileItem = item;
+                                        break;
                                     }
+                                }
+                                //Pull out melee
+                                bot.UpdateActiveItem(projectileItem.uid);
+                            }
+                            //Try get gun ready.
+                            try
+                            {
+                                timer.Once(2f, () =>
+                                 {
+                                     bot.AttemptReload();
+                                 });
+                            }
+                            catch { }
+                            //Only do this if bot wants items replaced on the corpse
+                            if (replacement)
+                            {
+                                NextTick(() =>
+                                {
+                                    //Update bot item list for corpse use
+                                    List<Botsinfo> items = new List<Botsinfo>();
+                                    foreach (Item item in bot.inventory.containerBelt.itemList)
+                                    {
+                                        if (item.info != null)
+                                        {
+                                            Botsinfo bi = ProcessKitItem(item);
+                                            if (!items.Contains(bi))
+                                                items.Add(bi);
+                                        }
 
-                                }
-                                foreach (Item item in bot.inventory.containerMain.itemList)
-                                {
-                                    if (item.info != null)
-                                    {
-                                        Botsinfo bi = ProcessKitItem(item);
-                                        if (!items.Contains(bi))
-                                            items.Add(bi);
                                     }
-                                }
-                                foreach (Item item in bot.inventory.containerWear.itemList)
-                                {
-                                    if (item.info != null)
+                                    foreach (Item item in bot.inventory.containerMain.itemList)
                                     {
-                                        Botsinfo bi = ProcessKitItem(item);
-                                        if (!items.Contains(bi))
-                                            items.Add(bi);
+                                        if (item.info != null)
+                                        {
+                                            Botsinfo bi = ProcessKitItem(item);
+                                            if (!items.Contains(bi))
+                                                items.Add(bi);
+                                        }
                                     }
-                                }
-                                NPC_Items.Add(bot.userID, items);
-                            });
-                        }
-                    });
+                                    foreach (Item item in bot.inventory.containerWear.itemList)
+                                    {
+                                        if (item.info != null)
+                                        {
+                                            Botsinfo bi = ProcessKitItem(item);
+                                            if (!items.Contains(bi))
+                                                items.Add(bi);
+                                        }
+                                    }
+                                    NPC_Items.Add(bot.userID, items);
+                                });
+                            }
+                        });
+                    }
+                    catch { }
                 });
             });
         }
