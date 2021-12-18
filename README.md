@@ -25,6 +25,11 @@ And set the name of the prefab group to have what settings you want to change. <
  * height=     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  if set can make small adjustment to bots navmesh height usual settings range will be -3 to +3.
  * speed=     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   if set adjusts how fast the bot can run.
  * steamicon=  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  if set the bot will use this steam profiles icon example steamicon=76561198188915047
+ * apcattack  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  if set the bot will get attacked by APCs
+ * canheal    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  if set the bot will use any health items in the kit when its below 1/2 health.
+ * damageScale=  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  Sets the percentage of normal damage. 100 default = normal player ammount damage;
+ * accuracy=  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Sets what percentage change a bullet has of doing damage. Default lowered to 30
+  
 
 <br>
 
