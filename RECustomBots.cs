@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.AI;
 namespace Oxide.Plugins
 {
-    [Info("RECustomBots", "bmgjet", "1.0.5")]
+    [Info("RECustomBots", "bmgjet", "1.0.6")]
     [Description("Improves bots created with NPC_Spawner in rust edit")]
     public class RECustomBots : RustPlugin
     {
@@ -56,45 +56,46 @@ namespace Oxide.Plugins
             "Im not even trying {N}",
             "HAHAHAHA {N}",
         };
-        /* New Settings method using keywords in any order.
-         * If a keyword isnt provided it will use the default for that setting.
-         * Only what you provide is adjusted
-         * 
-         * How to use:
-         * Seperate keywords by "." which will show as " " when in rust edit looking at prefab groups.
-         * Prefab group name must start with BMGBOT.
-         * 
-         * Avaliable keywords
-         * name=         if set it will apply a specific name to the bot, Other wise will pick one at random based on userid the spawner creates.
-         * kit=          if set will apply kit to bot, Can do male/female specific kits by using ^ between them kit=malekit^femalekit
-         * stationary    if this keyword is present bot will remain stationary.
-         * parachute     if this keyword is present bot will parachute to navmesh.
-         * replace       if this keyword is present bot replace default items with kit items.
-         * strip         if this keyword is present bot will strip all its lot on death.
-         * radiooff      if this keyword is present bot will not use the radio to chatter.
-         * peacekeeper   if this keyword is present bot will only fire on hostile players.
-         * mount         if this keyword is present bot will mount the closest seat.
-         * taunt         if this keyword is present bot will make taunts in the chat to players it interacts with.
-         * killnotice    if this keyword is present kills/deaths of this bot will be announced to chat.
-         * health=       if set will adjust the bots health to this example health=150     
-         * attack=       if set the boot will attack only up to this range loss of sight is a further 10f from this setting.
-         * roam=         if set this is how far the bot can move from its home spawn before it wants to return to home.
-         * cooldown=     if set changes the default home check rate.
-         * height=       if set can make small adjustment to bots navmesh height usuall settings range will be -3 to +3.
-         * speed=        if set adjusts how fast the bot can run.
-         * steamicon=    if set the bot will use the steamicon from this steamid example would be steamicon=76561198188915047
-         * apcattack     if this keyword is present bot will be targeted by the APC
-         * canheal       if this keyword is present bot will heal its self when its at half halth if its kitted with medical items.
-         * 
-         * Example: bot with 500hp health and is stionary
-         * BMGBOT.stationary.health=500
-         * 
-         * Example: bot that has a 2 different kits for males and females, parachutes in, radio chatter disabled, default items removed.
-         * BMGBOT.kit=guy1^girl1.radiooff.parachute.replace
-         * 
-         * Example: bot with custom name is a peacekeeper and sitting in a chair
-         * BMGBOT.name=Lazy Bot.peacekeeper.mount
-        */
+        // * New Settings method using keywords in any order.
+        // * If a keyword isnt provided it will use the default for that setting.
+        // * Only what you provide is adjusted
+        // * 
+        // * How to use:
+        // * Seperate keywords by "." which will show as " " when in rust edit looking at prefab groups.
+        // * Prefab group name must start with BMGBOT.
+        // * 
+        // * Avaliable keywords
+        // * name=         if set it will apply a specific name to the bot, Other wise will pick one at random based on userid the spawner creates.
+        // * kit=          if set will apply kit to bot, Can do male/female specific kits by using ^ between them kit=malekit^femalekit
+        // * stationary    if this keyword is present bot will remain stationary.
+        // * parachute     if this keyword is present bot will parachute to navmesh.
+        // * replace       if this keyword is present bot replace default items with kit items.
+        // * strip         if this keyword is present bot will strip all its lot on death.
+        // * radiooff      if this keyword is present bot will not use the radio to chatter.
+        // * peacekeeper   if this keyword is present bot will only fire on hostile players.
+        // * mount         if this keyword is present bot will mount the closest seat.
+        // * taunt         if this keyword is present bot will make taunts in the chat to players it interacts with.
+        // * killnotice    if this keyword is present kills/deaths of this bot will be announced to chat.
+        // * health=       if set will adjust the bots health to this example health=150     
+        // * attack=       if set the boot will attack only up to this range loss of sight is a further 10f from this setting.
+        // * roam=         if set this is how far the bot can move from its home spawn before it wants to return to home.
+        // * cooldown=     if set changes the default home check rate.
+        // * height=       if set can make small adjustment to bots navmesh height usuall settings range will be -3 to +3.
+        // * speed=        if set adjusts how fast the bot can run.
+        // * steamicon=    if set the bot will use the steamicon from this steamid example would be steamicon=76561198188915047
+        // * apcattack     if this keyword is present bot will be targeted by the APC
+        // * canheal       if this keyword is present bot will heal its self when its at half halth if its kitted with medical items.
+        // * damageScale=  What percentage of normal damage the bot will do. 100% damage is the default which is same damage a player does.
+        // * accuracy=     What percentage of shots will be at the target. 50% is the default.
+        // * 
+        // * Example: bot with 500hp health and is stionary
+        // * BMGBOT.stationary.health=500
+        // * 
+        // * Example: bot that has a 2 different kits for males and females, parachutes in, radio chatter disabled, default items removed.
+        // * BMGBOT.kit=guy1^girl1.radiooff.parachute.replace
+        // * 
+        // * Example: bot with custom name is a peacekeeper and sitting in a chair
+        // * BMGBOT.name=Lazy Bot.peacekeeper.mount
 
         //Weapons with issues
         //crossbow.entity
@@ -109,6 +110,8 @@ namespace Oxide.Plugins
         Dictionary<ulong, Vector3> NPC_Bots = new Dictionary<ulong, Vector3>();
         //Store bots items
         Dictionary<ulong, List<Botsinfo>> NPC_Items = new Dictionary<ulong, List<Botsinfo>>();
+        //Ignored shots
+        List<ulong> IgnoredShots = new List<ulong>();
         //Store List of place holders to remove
         List<BaseEntity> PlaceHolders = new List<BaseEntity>();
         //Check if fully started.
@@ -161,11 +164,11 @@ namespace Oxide.Plugins
         private class BotsSettings
         {
             //BotSettings Defaults
-            public string kitname = "";
+            public string kitname = "bmgjet";
             public bool stationary = false;
             public int health = 0;
             public float AttackRange = 30f;
-            public int roamrange = 5;
+            public int roamrange = 20;
             public int cooldown = 30;
             public bool replaceitems = false;
             public bool parachute = false;
@@ -181,6 +184,8 @@ namespace Oxide.Plugins
             public bool strip = false;
             public bool mount = false;
             public int speed = -1;
+            public int damageScale = 100;
+            public int accuracy = 30;
         }
         //Bot script
         public class BMGBOT : MonoBehaviour
@@ -234,7 +239,7 @@ namespace Oxide.Plugins
                     //Pick a random Icon
                     if (settings.steamicon == 0)
                     {
-                        settings.steamicon = plugin.SteamIds[Random.Range(0, plugin.SteamIds.Length - 1)] + 100u;
+                        settings.steamicon = plugin.SteamIds[Random.Range(0, plugin.SteamIds.Length - 1)] + (uint)100;
                     }
                     //Set as own owner
                     bp.OwnerID = bp.userID;
@@ -333,7 +338,7 @@ namespace Oxide.Plugins
                         }
                         if (plugin.IsKit(kitname))
                         {
-                            plugin.BotSkin(bp, kitname, settings.replaceitems);
+                            plugin.BotSkin(NPC, kitname, settings.replaceitems);
                         }
                     }
                     //stops down spamming when cool down set too low
@@ -387,7 +392,7 @@ namespace Oxide.Plugins
                     }
                     //Allows bot every topo
                     BN.topologyPreference = ((TerrainTopology.Enum)TerrainTopology.EVERYTHING);
-
+                    NPC.damageScale = settings.damageScale / 100f;
                     //Output Debug Info
                     if (plugin.DebugInfo) plugin.Puts("Bot " + bp.displayName + " spawned,Health:" + bp.health + " Kit:" + settings.kitname + " Range:" + settings.AttackRange.ToString() + " Roam:" + settings.roamrange.ToString() + " Cooldown:" + settings.cooldown.ToString() + " Default Items:" + !settings.replaceitems + " Stationary:" + settings.stationary.ToString() + " Parachute:" + settings.parachute);
                     //Update Server With Bot
@@ -625,7 +630,7 @@ namespace Oxide.Plugins
                     //Do Some Seated stuff
                     return;
                 }
-                ////Return home if no more activity.
+                //Return home if no more activity.
                 if (LastInteraction >= settings.cooldown && Vector3.Distance(bp.transform.position, Home) > settings.roamrange && !flying)
                 {
                     //Remove details from bot of its last taget
@@ -712,6 +717,9 @@ namespace Oxide.Plugins
                             AE.repeatDelay = 5f;
                             plugin.ServerThrow(AttackPlayer.transform.position, AE as ThrownWeapon, NPC);
                             return;
+                        case "snowball.entity":
+                            AE.repeatDelay = 5f;
+                            return;
                     };
 
                     BaseMelee weapon = NPC?.GetHeldEntity() as BaseMelee;
@@ -783,13 +791,13 @@ namespace Oxide.Plugins
                         if (NPC.triggerEndTime > Time.time)
                         {
                             //Keep Looping
-                            NPC.GetHeldEntity().ServerUse();
+                            NPC.GetHeldEntity().ServerUse(NPC.damageScale);
                             return;
                         }
                         else
                         {
                             //Give a single shot
-                            NPC.GetHeldEntity().ServerUse();
+                            NPC.GetHeldEntity().ServerUse(NPC.damageScale);
                         }
                     }
                     catch { }
@@ -926,8 +934,24 @@ namespace Oxide.Plugins
                     {
                         return;
                     }
+
+                    //Adjust Chance faces the right way.
+                    //BN.SetFacingDirectionOverride(AttackPlayer.transform.position += new Vector3(-UnityEngine.Random.Range(0.0f, 1.0f), -UnityEngine.Random.Range(0.0f , 1.0f), -UnityEngine.Random.Range(0.0f, 1.0f))); ;
                     //Turn to the player thats the target
-                    BN.SetFacingDirectionEntity(AttackPlayer);
+                    if (UnityEngine.Random.Range(1, 101) <= settings.accuracy)
+                    {
+                        BN.SetFacingDirectionEntity(AttackPlayer);
+                        if (plugin.IgnoredShots.Contains(bp.userID))
+                            plugin.IgnoredShots.Remove(bp.userID);
+                    }
+                    else
+                    {
+                        if(!plugin.IgnoredShots.Contains(bp.userID))
+                        plugin.IgnoredShots.Add(bp.userID);
+                    }
+
+
+
                     //Attack
                     AttackLogic(AttackPlayer);
                 }
@@ -1005,6 +1029,8 @@ namespace Oxide.Plugins
                                 else if (keyword.ToLower().Contains("height")) { try { bs.height = int.Parse(keyword.Split('=')[1]); } catch { bs.height = 0; } }
                                 else if (keyword.ToLower().Contains("steamicon")) { try { bs.steamicon = ulong.Parse(keyword.Split('=')[1]); } catch { bs.steamicon = 0; } }
                                 else if (keyword.ToLower().Contains("speed")) { try { bs.speed = int.Parse(keyword.Split('=')[1]); } catch { bs.speed = 0; } }
+                                else if (keyword.ToLower().Contains("accuracy")) { try { bs.accuracy = int.Parse(keyword.Split('=')[1]); } catch { bs.accuracy = 50; } }
+                                else if (keyword.ToLower().Contains("damageScale")) { try { bs.damageScale = int.Parse(keyword.Split('=')[1]); } catch { bs.damageScale = 100; } }
                                 else if (keyword.ToLower().Contains("strip")) { bs.strip = true; }
                                 else if (keyword.ToLower().Contains("mount")) { bs.mount = true; }
                                 else if (keyword.ToLower().Contains("killnotice")) { bs.killnotice = true; }
@@ -1074,6 +1100,20 @@ namespace Oxide.Plugins
                         doorfix.transform.localScale = new Vector3(0.1f, doorfix.transform.localScale.y, doorfix.transform.localScale.z);
                     }
                 }
+            }
+        }
+
+        void OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+        {
+            if (info != null && info.InitiatorPlayer != null && entity != null)
+            {
+                BasePlayer player = info.InitiatorPlayer;
+                if (IgnoredShots.Contains(player.userID))
+                {
+                    info.damageTypes.ScaleAll(0.1f);
+                    IgnoredShots.Remove(player.userID);
+                }
+
             }
         }
 
@@ -1385,7 +1425,7 @@ namespace Oxide.Plugins
                 if (Vector3.Distance(bot.transform.position, AttackPlayer.transform.position) < range)
                 {
                     //Apply damage and play SFX
-                    AttackPlayer.Hurt(Damage, damagetype, bot, true);
+                    //AttackPlayer.Hurt(Damage, damagetype, bot, true);
                     if (UnityEngine.Random.Range(1, 101) <= HeadshotPercentage)
                         Effect.server.Run(sfx, AttackPlayer.transform.position);
                 }
@@ -1574,7 +1614,7 @@ namespace Oxide.Plugins
             UnityEngine.Random.State state = UnityEngine.Random.state;
             //initilise in a known state so we already know the outcome of the random generator
             //Feed userid as the seed
-            UnityEngine.Random.InitState((int)(4332UL + userID));
+            UnityEngine.Random.InitState((int)((uint)4332 + userID));
             //Determin gender
             bool Gender = (UnityEngine.Random.Range(0f, 1f) > 0.5f);
             //Reset state back to a random unknown state we saved.
@@ -1618,7 +1658,7 @@ namespace Oxide.Plugins
             return (bool)success;
         }
 
-        void BotSkin(BasePlayer bot, string Skin, bool replacement)
+        void BotSkin(NPCPlayer bot, string Skin, bool replacement)
         {
             //Remove Default kit
             ItemManager.DoRemoves();
@@ -1633,113 +1673,117 @@ namespace Oxide.Plugins
             //Trys to equip stuff after a delay for kits plugin to of ran
             Item projectileItem = null;
             //Find first gun
-            foreach (var item in bot.inventory.containerBelt.itemList.ToList())
-            {
-                //Move medial items out of hot bar
-                if (item.GetHeldEntity() is MedicalTool)
-                {
-                    if (bot.inventory.containerBelt.GetSlot(5) != null)
-                    {
-                        bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
-                    }
-                    item.MoveToContainer(bot.inventory.containerBelt, 5);
-                    continue;
-                }
-                if (item.GetHeldEntity() is BaseProjectile)
-                {
-                    projectileItem = item;
-                    break;
-                }
-            }
-            if (projectileItem != null)
-            {
-                //pull out gun.
-                bot.UpdateActiveItem(projectileItem.uid);
-                bot.inventory.UpdatedVisibleHolsteredItems();
-            }
-            else
-            {
-                //Find a melee weapon in the belt
-                foreach (var item in bot.inventory.containerBelt.itemList.ToList())
-                {
+            timer.Once(0.5f, () =>
+             {
+                 foreach (var item in bot.inventory.containerBelt.itemList.ToList())
+                 {
+                     if (item.GetHeldEntity() is BaseProjectile)
+                     {
+                         projectileItem = item;
+                         break;
+                     }
                     //Move medial items out of hot bar
                     if (item.GetHeldEntity() is MedicalTool)
-                    {
-                        if (bot.inventory.containerBelt.GetSlot(5) != null)
-                        {
-                            bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
-                        }
-                        item.MoveToContainer(bot.inventory.containerBelt, 5);
-                        continue;
-                    }
-                    if (item.GetHeldEntity() is BaseMelee)
-                    {
-                        projectileItem = item;
-                        break;
-                    }
-                }
-                //Try pull out active weapon
-                try
-                {
+                     {
+                         if (bot.inventory.containerBelt.GetSlot(5) != null)
+                         {
+                             bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
+                         }
+                         item.MoveToContainer(bot.inventory.containerBelt, 5);
+                         continue;
+                     }
+
+                 }
+                 if (projectileItem != null)
+                 {
+                    //pull out gun.
                     bot.UpdateActiveItem(projectileItem.uid);
-                    bot.inventory.UpdatedVisibleHolsteredItems();
-                }
-                catch { }
-            }
-            //Try get gun ready.
-            try
-            {
-                timer.Once(1f, () =>
-                {
-                    (bot as NPCPlayer).AttemptReload();
-                });
-            }
-            catch { }
-            //Only do this if bot wants items replaced on the corpse
-            if (replacement)
-            {
-                timer.Once(0.5f, () =>
-                {
+                     bot.inventory.UpdatedVisibleHolsteredItems();
+                 }
+                 else
+                 {
+                    //Find a melee weapon in the belt
+                    foreach (var item in bot.inventory.containerBelt.itemList.ToList())
+                     {
+                        //Move medial items out of hot bar
+                        if (item.GetHeldEntity() is MedicalTool)
+                         {
+                             if (bot.inventory.containerBelt.GetSlot(5) != null)
+                             {
+                                 bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
+                             }
+                             item.MoveToContainer(bot.inventory.containerBelt, 5);
+                             continue;
+                         }
+                         if (item.GetHeldEntity() is BaseMelee)
+                         {
+                             projectileItem = item;
+                             break;
+                         }
+                     }
+                    //Try pull out active weapon
+                    try
+                     {
+                         bot.UpdateActiveItem(projectileItem.uid);
+                         bot.inventory.UpdatedVisibleHolsteredItems();
+                     }
+                     catch { }
+                 }
+                //Try get gun ready.
+                try
+                 {
+                     timer.Once(1f, () =>
+                    {
+                     (bot as NPCPlayer).AttemptReload();
+                 });
+                 }
+                 catch { }
+                //Only do this if bot wants items replaced on the corpse
+                if (replacement)
+                 {
+                     timer.Once(0.5f, () =>
+                    {
                     //Update bot item list for corpse use
                     List<Botsinfo> items = new List<Botsinfo>();
-                    foreach (Item item in bot.inventory.containerBelt.itemList)
-                    {
-                        if (item.info != null)
-                        {
-                            Botsinfo bi = ProcessKitItem(item);
-                            if (!items.Contains(bi))
-                                items.Add(bi);
-                        }
+                     foreach (Item item in bot.inventory.containerBelt.itemList)
+                     {
+                         if (item.info != null)
+                         {
+                             Botsinfo bi = ProcessKitItem(item);
+                             if (!items.Contains(bi))
+                                 items.Add(bi);
+                         }
 
-                    }
-                    foreach (Item item in bot.inventory.containerMain.itemList)
-                    {
-                        if (item.info != null)
-                        {
-                            Botsinfo bi = ProcessKitItem(item);
-                            if (!items.Contains(bi))
-                                items.Add(bi);
-                        }
-                    }
-                    foreach (Item item in bot.inventory.containerWear.itemList)
-                    {
-                        if (item.info != null)
-                        {
-                            Botsinfo bi = ProcessKitItem(item);
-                            if (!items.Contains(bi))
-                                items.Add(bi);
-                        }
-                    }
-                    if (NPC_Items.ContainsKey(bot.userID))
-                    {
-                        NPC_Items[bot.userID] = items;
-                    }
-                    else
-                    {
-                        NPC_Items.Add(bot.userID, items);
-                    }
-                });
-            }
+                     }
+                     foreach (Item item in bot.inventory.containerMain.itemList)
+                     {
+                         if (item.info != null)
+                         {
+                             Botsinfo bi = ProcessKitItem(item);
+                             if (!items.Contains(bi))
+                                 items.Add(bi);
+                         }
+                     }
+                     foreach (Item item in bot.inventory.containerWear.itemList)
+                     {
+                         if (item.info != null)
+                         {
+                             Botsinfo bi = ProcessKitItem(item);
+                             if (!items.Contains(bi))
+                                 items.Add(bi);
+                         }
+                     }
+                     if (NPC_Items.ContainsKey(bot.userID))
+                     {
+                         NPC_Items[bot.userID] = items;
+                     }
+                     else
+                     {
+                         NPC_Items.Add(bot.userID, items);
+                     }
+                 });
+                 }
+             });
         }
     }
 }
