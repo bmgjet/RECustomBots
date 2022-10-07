@@ -200,7 +200,7 @@ namespace Oxide.Plugins
             BasePlayer bp;
             HumanNPC bot;
             NPCPlayer NPC;
-            BaseAIBrain<ScarecrowNPC> SBrain;
+            ScarecrowBrain SBrain;
             BaseNavigator BN;
             //is healing
             bool Healing = false;
@@ -248,13 +248,13 @@ namespace Oxide.Plugins
                     {
                         //Face Punches random function using steamid
                         settings.name = RandomUsernames.Get((int)bp.userID);
-                        bp._name = settings.name;
+                        bp.name = settings.name;
                         plugin.NPC_Spawners[plugin.NPC_Bots[bp.userID]].name = settings.name;
                     }
                     else
                     {
                         //Set custom botname
-                        bp._name = settings.name;
+                        bp.name = settings.name;
                     }
                     //Update the bot
                     bp.displayName = settings.name;
@@ -352,7 +352,6 @@ namespace Oxide.Plugins
                         bot.Brain.SenseRange = settings.AttackRange;
                         bot.Brain.ListenRange = settings.AttackRange;
                         bot.Brain.TargetLostRange = settings.AttackRange;
-                        bot.Brain.Senses.maxRange = settings.AttackRange;
                         bot.Brain.Navigator.MaxRoamDistanceFromHome = settings.roamrange;
                         bot.Brain.AttackRangeMultiplier = 1f;
                         bot.Brain.Senses.Memory.Targets.Clear();
@@ -371,7 +370,6 @@ namespace Oxide.Plugins
                         SBrain.SenseRange = settings.AttackRange;
                         SBrain.ListenRange = settings.AttackRange;
                         SBrain.TargetLostRange = settings.AttackRange;
-                        SBrain.Senses.maxRange = settings.AttackRange;
                         SBrain.Navigator.MaxRoamDistanceFromHome = settings.roamrange;
                         SBrain.AttackRangeMultiplier = 1f;
                         SBrain.Senses.Memory.Targets.Clear();
@@ -566,16 +564,11 @@ namespace Oxide.Plugins
                 //Remove events from bot, Set to normal movement speed, Make them act if they are going to cover
                 if (bot != null)
                 {
-                    bot.Brain.Events.RemoveAll();
                     bot.Brain.Navigator.SetDestination(Home, BaseNavigator.NavigationSpeed.Normal);
-                    bot.Brain.SwitchToState(AIState.TakeCover);
-
                 }
                 else if (SBrain != null)
                 {
-                    SBrain.Events.RemoveAll();
                     SBrain.Navigator.SetDestination(Home, BaseNavigator.NavigationSpeed.Normal);
-                    SBrain.SwitchToState(AIState.TakeCover);
                 }
                 //Change flags
                 bp.SetPlayerFlag(BasePlayer.PlayerFlags.Relaxed, true);
@@ -591,7 +584,6 @@ namespace Oxide.Plugins
                     bot.Brain.Senses.Memory.Threats.Clear();
                     bot.Brain.Senses.Memory.All.Clear();
                     bot.Brain.Senses.Memory.LOS.Clear();
-                    bot.Brain.CurrentState.StateLeave();
                     bot.Brain.HostileTargetsOnly = settings.peacekeeper;
                     bot.Brain.SetEnabled(false);
                     Invoke("ResetSenses", resetdelay);
@@ -602,7 +594,6 @@ namespace Oxide.Plugins
                     SBrain.Senses.Memory.Threats.Clear();
                     SBrain.Senses.Memory.All.Clear();
                     SBrain.Senses.Memory.LOS.Clear();
-                    SBrain.CurrentState.StateLeave();
                     SBrain.HostileTargetsOnly = settings.peacekeeper;
                     SBrain.SetEnabled(false);
                     Invoke("ResetSenses", resetdelay);
@@ -685,9 +676,7 @@ namespace Oxide.Plugins
                     switch (AE.ShortPrefabName)
                     {
                         case "flamethrower.entity":
-                            NPC.triggerEndTime = Time.time + 5f;
                             InvokeRepeating("use", 0f, 0.025f);
-                            AE.StartAttackCooldown(AE.attackSpacing);
                             plugin.BotMeleeAttack(NPC, AttackPlayer, AE, Rust.DamageType.Heat, 5, "assets/bundled/prefabs/fx/impacts/additive/fire.prefab", 100);
                             return;
 
@@ -734,7 +723,6 @@ namespace Oxide.Plugins
                         if (plugin.DebugInfo) plugin.Puts("Trigger Melee Attack");
                         if (NPC.MeleeAttack())
                         {
-                            AE.StartAttackCooldown(AE.attackSpacing);
                             //Apply Damage
                             plugin.BotMeleeAttack(NPC, AttackPlayer, weapon, Rust.DamageType.Slash, weapon.TotalDamage());
                         }
@@ -767,7 +755,6 @@ namespace Oxide.Plugins
                             triggertime = gun.primaryMagazine.contents / 4;
                             if (triggertime == 0) triggertime = 1f;
                         }
-                        NPC.triggerEndTime = Time.time + triggertime;
                         InvokeRepeating("use", 0f, 0.025f);
                     }
                     //reload gun if less than 1 shot left.
@@ -787,18 +774,7 @@ namespace Oxide.Plugins
                 {
                     try
                     {
-                        //Checks that trigger end is after current time
-                        if (NPC.triggerEndTime > Time.time)
-                        {
-                            //Keep Looping
                             NPC.GetHeldEntity().ServerUse(NPC.damageScale);
-                            return;
-                        }
-                        else
-                        {
-                            //Give a single shot
-                            NPC.GetHeldEntity().ServerUse(NPC.damageScale);
-                        }
                     }
                     catch { }
                 }
@@ -852,7 +828,7 @@ namespace Oxide.Plugins
                     }
                 }
                 //Heal logic
-                if (NPC._health < NPC._maxHealth / 2 && !Healing && settings.canheal)
+                if (NPC.health < NPC.MaxHealth() / 2 && !Healing && settings.canheal)
                 {
                     if (plugin.DebugInfo) plugin.Puts("Bot is Healing");
                     //Store current held gun if not medical item
@@ -946,8 +922,8 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        if(!plugin.IgnoredShots.Contains(bp.userID))
-                        plugin.IgnoredShots.Add(bp.userID);
+                        if (!plugin.IgnoredShots.Contains(bp.userID))
+                            plugin.IgnoredShots.Add(bp.userID);
                     }
 
 
@@ -994,7 +970,7 @@ namespace Oxide.Plugins
         {
             //Clears clocksettings incase its triggered reload.
             NPC_Spawners.Clear();
-            uint placeholderid = StringPool.toNumber[prefabplaceholder];
+            uint placeholderid = StringPool.Get(prefabplaceholder);
             //Find All NPCSpawners in the map
             for (int i = World.Serialization.world.prefabs.Count - 1; i >= 0; i--)
             {
@@ -1126,9 +1102,9 @@ namespace Oxide.Plugins
                 BaseMountable seat = entity.GetComponent<BaseMountable>();
                 if (seat != null)
                 {
-                    if (seat._mounted.IsNpc)
+                    if (seat.GetMounted().IsNpc)
                     {
-                        seat._mounted.EnsureDismounted();
+                        seat.DismountAllPlayers();
                     }
                 }
                 //Get player
@@ -1175,7 +1151,7 @@ namespace Oxide.Plugins
                         if (NPC_Spawners[NPC_Bots[player.userID]].killnotice)
                         {
                             //Send kill announcement to chat.
-                            CreateAnouncment(attacker.displayName + " Killed " + player._name + " With " + info.damageTypes.GetMajorityDamageType());
+                            CreateAnouncment(attacker.displayName + " Killed " + player.name + " With " + info.damageTypes.GetMajorityDamageType());
                         }
                         if (NPC_Spawners[NPC_Bots[player.userID]].taunts)
                         {
@@ -1268,7 +1244,7 @@ namespace Oxide.Plugins
                         //Empty default items off corpse
                         for (int i = 0; i < 3; i++)
                         {
-                            corpse.containers[i].Clear();
+                            corpse.containers[i].Kill();
                         }
                         //Only remove items 
                         if (NPC_Spawners[NPC_Bots[corpse.playerSteamID]].strip) return;
@@ -1298,7 +1274,7 @@ namespace Oxide.Plugins
                                 {
                                     if (it.info.shortname.Contains("halloween.mummysuit") || it.info.shortname.Contains("scarecrow.suit") || it.info.shortname.Contains("hazmatsuit_scientist"))
                                     {
-                                        it.DoRemove();
+                                        it.Remove();
                                     }
                                 }
                             }
@@ -1546,7 +1522,6 @@ namespace Oxide.Plugins
             }
             //Make shot happen.
             entity.Spawn();
-            _ProectileWeapon.StartAttackCooldown(_ProectileWeapon.repeatDelay);
         }
 
         public void FireWaterGun(BasePlayer ownerPlayer, BaseEntity wep)
@@ -1605,7 +1580,6 @@ namespace Oxide.Plugins
             if (dud != null)
                 dud.dudChance = 0f;
             entity.Spawn();
-            wep.StartAttackCooldown(wep.repeatDelay);
         }
 
         public static bool IsFemale(ulong userID)
@@ -1674,116 +1648,116 @@ namespace Oxide.Plugins
             Item projectileItem = null;
             //Find first gun
             timer.Once(0.5f, () =>
-             {
-                 foreach (var item in bot.inventory.containerBelt.itemList.ToList())
-                 {
-                     if (item.GetHeldEntity() is BaseProjectile)
-                     {
-                         projectileItem = item;
-                         break;
-                     }
+            {
+                foreach (var item in bot.inventory.containerBelt.itemList.ToList())
+                {
+                    if (item.GetHeldEntity() is BaseProjectile)
+                    {
+                        projectileItem = item;
+                        break;
+                    }
                     //Move medial items out of hot bar
                     if (item.GetHeldEntity() is MedicalTool)
-                     {
-                         if (bot.inventory.containerBelt.GetSlot(5) != null)
-                         {
-                             bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
-                         }
-                         item.MoveToContainer(bot.inventory.containerBelt, 5);
-                         continue;
-                     }
+                    {
+                        if (bot.inventory.containerBelt.GetSlot(5) != null)
+                        {
+                            bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
+                        }
+                        item.MoveToContainer(bot.inventory.containerBelt, 5);
+                        continue;
+                    }
 
-                 }
-                 if (projectileItem != null)
-                 {
+                }
+                if (projectileItem != null)
+                {
                     //pull out gun.
                     bot.UpdateActiveItem(projectileItem.uid);
-                     bot.inventory.UpdatedVisibleHolsteredItems();
-                 }
-                 else
-                 {
+                    bot.inventory.UpdatedVisibleHolsteredItems();
+                }
+                else
+                {
                     //Find a melee weapon in the belt
                     foreach (var item in bot.inventory.containerBelt.itemList.ToList())
-                     {
+                    {
                         //Move medial items out of hot bar
                         if (item.GetHeldEntity() is MedicalTool)
-                         {
-                             if (bot.inventory.containerBelt.GetSlot(5) != null)
-                             {
-                                 bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
-                             }
-                             item.MoveToContainer(bot.inventory.containerBelt, 5);
-                             continue;
-                         }
-                         if (item.GetHeldEntity() is BaseMelee)
-                         {
-                             projectileItem = item;
-                             break;
-                         }
-                     }
+                        {
+                            if (bot.inventory.containerBelt.GetSlot(5) != null)
+                            {
+                                bot.inventory.containerBelt.GetSlot(5).MoveToContainer(bot.inventory.containerMain);
+                            }
+                            item.MoveToContainer(bot.inventory.containerBelt, 5);
+                            continue;
+                        }
+                        if (item.GetHeldEntity() is BaseMelee)
+                        {
+                            projectileItem = item;
+                            break;
+                        }
+                    }
                     //Try pull out active weapon
                     try
-                     {
-                         bot.UpdateActiveItem(projectileItem.uid);
-                         bot.inventory.UpdatedVisibleHolsteredItems();
-                     }
-                     catch { }
-                 }
+                    {
+                        bot.UpdateActiveItem(projectileItem.uid);
+                        bot.inventory.UpdatedVisibleHolsteredItems();
+                    }
+                    catch { }
+                }
                 //Try get gun ready.
                 try
-                 {
-                     timer.Once(1f, () =>
+                {
+                    timer.Once(1f, () =>
                     {
-                     (bot as NPCPlayer).AttemptReload();
-                 });
-                 }
-                 catch { }
+                        (bot as NPCPlayer).AttemptReload();
+                    });
+                }
+                catch { }
                 //Only do this if bot wants items replaced on the corpse
                 if (replacement)
-                 {
-                     timer.Once(0.5f, () =>
+                {
+                    timer.Once(0.5f, () =>
                     {
-                    //Update bot item list for corpse use
-                    List<Botsinfo> items = new List<Botsinfo>();
-                     foreach (Item item in bot.inventory.containerBelt.itemList)
-                     {
-                         if (item.info != null)
-                         {
-                             Botsinfo bi = ProcessKitItem(item);
-                             if (!items.Contains(bi))
-                                 items.Add(bi);
-                         }
+                        //Update bot item list for corpse use
+                        List<Botsinfo> items = new List<Botsinfo>();
+                        foreach (Item item in bot.inventory.containerBelt.itemList)
+                        {
+                            if (item.info != null)
+                            {
+                                Botsinfo bi = ProcessKitItem(item);
+                                if (!items.Contains(bi))
+                                    items.Add(bi);
+                            }
 
-                     }
-                     foreach (Item item in bot.inventory.containerMain.itemList)
-                     {
-                         if (item.info != null)
-                         {
-                             Botsinfo bi = ProcessKitItem(item);
-                             if (!items.Contains(bi))
-                                 items.Add(bi);
-                         }
-                     }
-                     foreach (Item item in bot.inventory.containerWear.itemList)
-                     {
-                         if (item.info != null)
-                         {
-                             Botsinfo bi = ProcessKitItem(item);
-                             if (!items.Contains(bi))
-                                 items.Add(bi);
-                         }
-                     }
-                     if (NPC_Items.ContainsKey(bot.userID))
-                     {
-                         NPC_Items[bot.userID] = items;
-                     }
-                     else
-                     {
-                         NPC_Items.Add(bot.userID, items);
-                     }
-                 });
-                 }
-             });
+                        }
+                        foreach (Item item in bot.inventory.containerMain.itemList)
+                        {
+                            if (item.info != null)
+                            {
+                                Botsinfo bi = ProcessKitItem(item);
+                                if (!items.Contains(bi))
+                                    items.Add(bi);
+                            }
+                        }
+                        foreach (Item item in bot.inventory.containerWear.itemList)
+                        {
+                            if (item.info != null)
+                            {
+                                Botsinfo bi = ProcessKitItem(item);
+                                if (!items.Contains(bi))
+                                    items.Add(bi);
+                            }
+                        }
+                        if (NPC_Items.ContainsKey(bot.userID))
+                        {
+                            NPC_Items[bot.userID] = items;
+                        }
+                        else
+                        {
+                            NPC_Items.Add(bot.userID, items);
+                        }
+                    });
+                }
+            });
         }
     }
 }
